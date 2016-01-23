@@ -2,3 +2,6 @@
 	path = dpdk
 	url = https://github.com/netgroup-polito/dpdk
 	branch = hotplug
+[submodule "ovs"]
+	path = ovs
+	url = https://github.com/netgroup-polito/ovs
