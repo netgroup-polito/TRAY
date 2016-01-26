@@ -83,13 +83,20 @@ int main(int argc, char *argv[])
 	argc -= retval;
 	argv += retval;
 
-	if(argc < 2)
+	if(argc < 1)
 	{
-		RTE_LOG(INFO, APP, "usage: -- tx_ring rx_ring\n");
+		RTE_LOG(INFO, APP, "usage: -- port\n");
 		return 0;
 	}
 
-	init(argv[1], argv[2]);
+	char rx_ring_name[RTE_RING_NAMESIZE];
+	char tx_ring_name[RTE_RING_NAMESIZE];
+
+	/* be aware that ring name is in ovs point of view */
+	sprintf(rx_ring_name, "%s_tx", argv[1]);
+	sprintf(tx_ring_name, "%s_rx", argv[1]);
+
+	init(tx_ring_name, rx_ring_name);
 
 	printf("Free count in tx: %d\n", rte_ring_free_count(tx_ring));
 
