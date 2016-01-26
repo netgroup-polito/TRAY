@@ -20,14 +20,16 @@
 
 /* function prototypes */
 void forward_loop(void);
-void init(char * rx_ring_name, char * tx_ring_name);
+void init(char * rx1, char * tx1, char * rx2, char * tx2);
 void crtl_c_handler(int s);
 
 volatile sig_atomic_t stop;
 void crtl_c_handler(int s);
 
-struct rte_ring *rx_ring = NULL;
-struct rte_ring *tx_ring = NULL;
+struct rte_ring *rx_ring1 = NULL;
+struct rte_ring *tx_ring1 = NULL;
+struct rte_ring *rx_ring2 = NULL;
+struct rte_ring *tx_ring2 = NULL;
 
 int main(int argc, char *argv[])
 {
@@ -39,16 +41,13 @@ int main(int argc, char *argv[])
 	argc -= retval;
 	argv +=  retval;
 
-	if(argc < 2)
+	if(argc < 4)
 	{
-		RTE_LOG(INFO, APP, "usage: -- rx_ring tx_ring\n");
+		RTE_LOG(INFO, APP, "usage: -- rx_ring1 tx_ring1 rx_ring2 tx_ring2\n");
 		return 0;
 	}
 
-	init(argv[1], argv[2]);
-
-	printf("Free count in rx: %d\n", rte_ring_free_count(rx_ring));
-	printf("Free count in tx: %d\n", rte_ring_free_count(tx_ring));
+	init(argv[1], argv[2], argv[3], argv[4]);
 
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
 
@@ -66,23 +65,33 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void init(char * rx_ring_name, char * tx_ring_name)
+void init(char * rx1, char * tx1, char * rx2, char * tx2)
 {
 
-	if ((rx_ring = rte_ring_lookup(rx_ring_name)) == NULL)
+	if ((rx_ring1 = rte_ring_lookup(rx1)) == NULL)
 	{
-		rte_exit(EXIT_FAILURE, "Cannot find RX ring: %s\n", rx_ring_name);
+		rte_exit(EXIT_FAILURE, "Cannot find RX1 ring: %s\n", rx1);
 	}
 
-	if ((tx_ring = rte_ring_lookup(tx_ring_name)) == NULL)
+	if ((tx_ring1 = rte_ring_lookup(tx1)) == NULL)
 	{
-		rte_exit(EXIT_FAILURE, "Cannot find TX ring: %s\n", tx_ring_name);
+		rte_exit(EXIT_FAILURE, "Cannot find TX1 ring: %s\n", tx1);
+	}
+
+	if ((rx_ring2 = rte_ring_lookup(rx2)) == NULL)
+	{
+		rte_exit(EXIT_FAILURE, "Cannot find RX1 ring: %s\n", rx2);
+	}
+
+	if ((tx_ring2 = rte_ring_lookup(tx2)) == NULL)
+	{
+		rte_exit(EXIT_FAILURE, "Cannot find TX2 ring: %s\n", tx2);
 	}
 }
 
 void forward_loop(void)
 {
-
+	unsigned rx_pkts;
 #ifdef USE_BURST
 	void * pkts[BURST_SIZE] = {0};
 	int rslt = 0;
@@ -96,22 +105,36 @@ void forward_loop(void)
 #ifdef USE_BURST
 	while(likely(!stop))
 	{
-		unsigned rx_pkts = BURST_SIZE;
-
-		/*
+		 /*
 		 * Try dequeuing max possible packets first, if that fails, get the
 		 * most we can. Loop body should only execute once, maximum.
 		 */
-		while (unlikely(rte_ring_dequeue_bulk(rx_ring, pkts, rx_pkts) != 0) &&
+		rx_pkts = BURST_SIZE;
+		while (unlikely(rte_ring_dequeue_bulk(rx_ring1, pkts, rx_pkts) != 0) &&
 			rx_pkts > 0)
 		{
-			rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring), BURST_SIZE);
+			rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring1), BURST_SIZE);
 		}
 
 		if (rx_pkts > 0) {
 			/* blocking enqueue */
 			do {
-				rslt = rte_ring_enqueue_bulk(tx_ring, pkts, rx_pkts);
+				rslt = rte_ring_enqueue_bulk(tx_ring1, pkts, rx_pkts);
+			} while (rslt == -ENOBUFS);
+		}
+
+		/* do the same in the other sense */
+		rx_pkts = BURST_SIZE;
+		while (unlikely(rte_ring_dequeue_bulk(rx_ring2, pkts, rx_pkts) != 0) &&
+			rx_pkts > 0)
+		{
+			rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring2), BURST_SIZE);
+		}
+
+		if (rx_pkts > 0) {
+			/* blocking enqueue */
+			do {
+				rslt = rte_ring_enqueue_bulk(tx_ring2, pkts, rx_pkts);
 			} while (rslt == -ENOBUFS);
 		}
 	}
