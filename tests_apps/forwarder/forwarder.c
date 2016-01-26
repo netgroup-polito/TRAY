@@ -41,13 +41,27 @@ int main(int argc, char *argv[])
 	argc -= retval;
 	argv +=  retval;
 
-	if(argc < 4)
+	if(argc < 2)
 	{
-		RTE_LOG(INFO, APP, "usage: -- rx_ring1 tx_ring1 rx_ring2 tx_ring2\n");
+		RTE_LOG(INFO, APP, "usage: -- port1 port2\n");
 		return 0;
 	}
 
-	init(argv[1], argv[2], argv[3], argv[4]);
+	char rx_ring_name1[RTE_RING_NAMESIZE];
+	char tx_ring_name1[RTE_RING_NAMESIZE];
+
+	char rx_ring_name2[RTE_RING_NAMESIZE];
+	char tx_ring_name2[RTE_RING_NAMESIZE];
+
+	/* be aware that ring name is in ovs point of view */
+	sprintf(rx_ring_name1, "%s_tx", argv[1]);
+	sprintf(tx_ring_name1, "%s_rx", argv[1]);
+
+	sprintf(rx_ring_name2, "%s_tx", argv[2]);
+	sprintf(tx_ring_name2, "%s_rx", argv[2]);
+
+
+	init(rx_ring_name1, tx_ring_name1, rx_ring_name2, tx_ring_name2);
 
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
 
@@ -119,7 +133,7 @@ void forward_loop(void)
 		if (rx_pkts > 0) {
 			/* blocking enqueue */
 			do {
-				rslt = rte_ring_enqueue_bulk(tx_ring1, pkts, rx_pkts);
+				rslt = rte_ring_enqueue_bulk(tx_ring2, pkts, rx_pkts);
 			} while (rslt == -ENOBUFS);
 		}
 
@@ -134,7 +148,7 @@ void forward_loop(void)
 		if (rx_pkts > 0) {
 			/* blocking enqueue */
 			do {
-				rslt = rte_ring_enqueue_bulk(tx_ring2, pkts, rx_pkts);
+				rslt = rte_ring_enqueue_bulk(tx_ring1, pkts, rx_pkts);
 			} while (rslt == -ENOBUFS);
 		}
 	}
