@@ -48,11 +48,7 @@
 #define DELAY_CYCLES 0
 
 /* Per-port statistics struct */
-struct port_statistics {
-	uint32_t tx;
-	uint32_t tx_retries;
-	uint32_t alloc_fails;
-} __rte_cache_aligned;
+uint32_t rx;
 
 uint64_t checksum = 0;
 
@@ -67,8 +63,6 @@ unsigned int counter = 0;
 
 volatile sig_atomic_t stop;
 volatile sig_atomic_t pause_;
-
-struct port_statistics stats;
 
 struct rte_ring *tx_ring = NULL;
 struct rte_ring *rx_ring = NULL;
@@ -146,6 +140,7 @@ void send_loop(void)
 {
 	RTE_LOG(INFO, APP, "send_loop()\n");
 	char pkt[PKT_SIZE] = {0};
+	int nreceived;
 
 	int retval = 0;
 	(void) retval;
@@ -256,10 +251,9 @@ void send_loop(void)
 			i += rte_ring_enqueue_burst(tx_ring, (void **) &packets_array[i], ntosend - i);
 
 			/* also dequeue some packets */
-			rte_ring_dequeue_burst(rx_ring, (void **) packets_array_rx, BURST_SIZE);
+			nreceived= rte_ring_dequeue_burst(rx_ring, (void **) packets_array_rx, BURST_SIZE);
+			rx += nreceived; /* update statistics */
 		}
-
-		stats.tx += ntosend;
 
 #else	// [NO] USE_BURST
 	#if ALLOC_METHOD  == ALLOC_OVS //Method 1
@@ -268,7 +262,7 @@ void send_loop(void)
 		if(retval != 0)
 		{
 		#ifdef CALC_ALLOC_STATS
-			stats.alloc_fails++;
+			//stats.alloc_fails++;
 		#endif
 			continue;
 		}
@@ -315,13 +309,13 @@ void send_loop(void)
 		if(retval == -ENOBUFS && !stop)
 		{
 	#ifdef CALC_TX_TRIES
-			stats.tx_retries++;
+			//stats.tx_retries++;
 	#endif
 			goto tryagain;
 		}
 
 	#ifdef CALC_TX_STATS
-		stats.tx++;
+		//stats.tx++;
 	#endif
 
 #endif //USE_BURST
@@ -367,23 +361,24 @@ void  ALARMhandler(int sig)
 
 void print_stats(void)
 {
+	printf("RX Packets:\t%'" PRIu32 "\n", rx);
+	rx = 0;
+//#ifdef CALC_TX_STATS
+//	printf("TX Packets:\t%'" PRIu32 "\n", stats.tx);
+//	stats.tx = 0;
+//#endif
+//
+//#ifdef CALC_TX_TRIES
+//	printf("TX retries:\t%'" PRIu32 "\n", stats.tx_retries);
+//	stats.tx_retries = 0;
+//#endif
+//
+//#ifdef CALC_ALLOC_STATS
+//	printf("Alloc fails:\t%'" PRIu32 "\n", stats.alloc_fails);
+//	stats.alloc_fails = 0;
+//#endif
 
-#ifdef CALC_TX_STATS
-	printf("TX Packets:\t%'" PRIu32 "\n", stats.tx);
-	stats.tx = 0;
-#endif
-
-#ifdef CALC_TX_TRIES
-	printf("TX retries:\t%'" PRIu32 "\n", stats.tx_retries);
-	stats.tx_retries = 0;
-#endif
-
-#ifdef CALC_ALLOC_STATS
-	printf("Alloc fails:\t%'" PRIu32 "\n", stats.alloc_fails);
-	stats.alloc_fails = 0;
-#endif
-
-	printf("\n");
+	//printf("\n");
 }
 
 void crtl_c_handler(int s)
