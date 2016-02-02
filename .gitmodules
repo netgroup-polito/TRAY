@@ -5,3 +5,7 @@
 [submodule "ovs"]
 	path = ovs
 	url = https://github.com/netgroup-polito/ovs
+[submodule "un-orchestrator"]
+	path = un-orchestrator
+	url = https://github.com/netgroup-polito/un-orchestrator/
+	branch = directvm2vm
