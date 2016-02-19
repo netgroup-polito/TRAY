@@ -29,8 +29,8 @@
 #define PRINT_INTERVAL 1
 
 //Allocation methods
-#define ALLOC_OVS 1		//Use the queues to allocate/free packets
-#define ALLOC_APP 2		//Allocate free packets directly in the application
+#define ALLOC 		1	/* allocate and deallocate packets */
+#define NO_ALLOC 	2	/* send the same packets always*/
 
 #define USE_BURST
 #define BURST_SIZE 32u
@@ -38,7 +38,7 @@
 #define CALC_RX_STATS
 //#define CALC_FREE_RETRIES
 //#define CALC_CHECKSUM
-#define ALLOC_METHOD ALLOC_APP
+#define ALLOC_METHOD NO_ALLOC
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -70,10 +70,6 @@ unsigned int kk = 0;
 
 struct rte_ring *rx_ring = NULL;
 
-#if ALLOC_METHOD == ALLOC_OVS
-struct rte_ring *free_q = NULL;
-#endif
-
 int main(int argc, char *argv[])
 {
 	setlocale(LC_NUMERIC, "en_US.utf-8");
@@ -90,7 +86,7 @@ int main(int argc, char *argv[])
 
 	if(argc < 1)
 	{
-		RTE_LOG(INFO, APP, "usage: -- [vm2vm]/[ovs] portname\n");
+		RTE_LOG(INFO, APP, "usage: -- portname\n");
 		return 0;
 	}
 
@@ -108,10 +104,12 @@ int main(int argc, char *argv[])
 	RTE_LOG(INFO, APP, "Burst: Disabled.\n");
 #endif
 
-#if ALLOC_METHOD == ALLOC_OVS
-	RTE_LOG(INFO, APP, "Alloc method: OVS.\n");
-#elif ALLOC_METHOD == ALLOC_APP
-	RTE_LOG(INFO, APP, "Alloc method: APP.\n");
+#if ALLOC_METHOD == ALLOC
+	RTE_LOG(INFO, APP, "Alloc method: ALLOC.\n");
+#elif ALLOC_METHOD == NO_ALLOC
+	RTE_LOG(INFO, APP, "Alloc method: NO_ALLOC.\n");
+#else
+	#error "Bad value for ALLOC_METHOD"
 #endif
 
 #ifdef CALC_CHECKSUM
@@ -132,13 +130,6 @@ void init(char * rx_ring_name)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find RX ring\n");
 	}
-
-#if ALLOC_METHOD == ALLOC_OVS
-	if ((free_q = rte_ring_lookup("recycling_queue")) == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find free ring\n");
-	}
-#endif
 }
 
 void receive_loop(void)
@@ -153,14 +144,11 @@ void receive_loop(void)
 	int retval = 0;
 #endif
 
-#if ALLOC_METHOD == ALLOC_APP
-	//struct rte_mempool * packets_pool = rte_mempool_lookup("packets");
 	struct rte_mempool * packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
 	if(packets_pool == NULL)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
 	}
-#endif
 
 	signal(SIGALRM, ALARMhandler);
 	alarm(PRINT_INTERVAL);
@@ -178,54 +166,46 @@ void receive_loop(void)
 				checksum += ((uint64_t *)packets_array[i]->buf_addr)[kk];
 	#endif
 
-	#if ALLOC_METHOD == ALLOC_OVS
-		//Free packets
-		i = 0;
-		while(i < nreceived)
-		{
-			i += rte_ring_enqueue_burst(free_q, (void **) &packets_array[i], nreceived - i);
-		}
-	#elif ALLOC_METHOD == ALLOC_APP
-		//if(likely(nreceived > 0))
-		//	rte_mempool_mp_put_bulk(packets_pool, (void **) packets_array, nreceived);
-	#else
-		#error "Not Implemented"
+	#if ALLOC_METHOD == ALLOC
+		if(likely(nreceived > 0))
+			rte_mempool_mp_put_bulk(packets_pool, (void **) packets_array, nreceived);
 	#endif
 
 	stats.rx += nreceived;
 
 #else // [NO] USE_BURST
-		retval = rte_ring_dequeue(rx_ring, (void **)&mbuf);
-		if(retval == 0)
-		{
-
-	#ifdef CALC_RX_STATS
-			stats.rx++;
-	#endif
-
-	#ifdef CALC_CHECKSUM
-			for(kk = 0; kk < 8; kk++)
-				checksum += ((uint64_t *)mbuf->buf_addr)[kk];
-	#endif
-
-			//Ok, we read the packet, now it is time to free it
-	#if ALLOC_METHOD == ALLOC_OVS			//Method 1:
-		tryagain:
-		retval = rte_ring_enqueue(free_q, (void *) mbuf);
-		if(retval == -ENOBUFS)
-		{
-		#ifdef CALC_FREE_RETRIES
-			stats.free_retries++;
-		#endif
-			if(!stop)
-				goto tryagain;
-		}
-	#elif 	ALLOC_METHOD == ALLOC_APP  //Method 2
-			//rte_pktmbuf_free(mbuf);
-	#else
-		#error "ALLOC_METHOD has a non valid value"
-	#endif
-		}
+	#error "No burst is not implemented"
+	//	retval = rte_ring_dequeue(rx_ring, (void **)&mbuf);
+	//	if(retval == 0)
+	//	{
+    //
+	//#ifdef CALC_RX_STATS
+	//		stats.rx++;
+	//#endif
+    //
+	//#ifdef CALC_CHECKSUM
+	//		for(kk = 0; kk < 8; kk++)
+	//			checksum += ((uint64_t *)mbuf->buf_addr)[kk];
+	//#endif
+    //
+	//		//Ok, we read the packet, now it is time to free it
+	//#if ALLOC_METHOD == ALLOC_OVS			//Method 1:
+	//	tryagain:
+	//	retval = rte_ring_enqueue(free_q, (void *) mbuf);
+	//	if(retval == -ENOBUFS)
+	//	{
+	//	#ifdef CALC_FREE_RETRIES
+	//		stats.free_retries++;
+	//	#endif
+	//		if(!stop)
+	//			goto tryagain;
+	//	}
+	//#elif 	ALLOC_METHOD == ALLOC_APP  //Method 2
+	//		//rte_pktmbuf_free(mbuf);
+	//#else
+	//	#error "ALLOC_METHOD has a non valid value"
+	//#endif
+	//	}
 #endif //USE_BURST
 	}	//while
 
