@@ -169,20 +169,14 @@ void send_loop(void)
 	RTE_LOG(INFO, APP, "There are %d free packets in the pool\n",
 		rte_mempool_count(packets_pool));
 
-#if ALLOC_METHOD == NO_ALLOC
-#elif ALLOC_METHOD == NO_ALLOC
-#else
-#error "Bad value for ALLOC_METHOD"
-#endif
-
-/* prealloc packets */
-#if ALLOC_METHOD == NO_ALLOC
-	#ifdef USE_BURST
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
 	int ntosend;
 	int n;
 	(void) n;
 
+/* prealloc packets */
+#if ALLOC_METHOD == NO_ALLOC
+	#ifdef USE_BURST
 	do
 	{
 		n = rte_mempool_get_bulk(packets_pool, (void **) packets_array, BURST_SIZE);
@@ -215,6 +209,7 @@ void send_loop(void)
 
 
 	#if ALLOC_METHOD == ALLOC
+		int n;
 		/* get BURST_SIZE free slots */
 		do
 		{
