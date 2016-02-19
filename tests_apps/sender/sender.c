@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include <rte_mbuf.h>
+#include <rte_ethdev.h>
 #include <rte_string_fns.h>
 #include <rte_memory.h>
 #include <rte_memzone.h>
@@ -48,7 +49,7 @@
 //#define CALC_CHECKSUM
 
 #define ALLOC_METHOD ALLOC
-#define SEND_MODE RING
+#define SEND_MODE ETHERNET
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -61,22 +62,48 @@ uint64_t checksum = 0;
 
 /* function prototypes */
 void send_loop(void);
-void init(char * tx_ring_name);
+void init(char * dev_name);
 void print_stats(void);
 void ALARMhandler(int sig);
 void crtl_c_handler(int s);
-
-
-inline void send_packets(void ** packets);
+inline void send_packets(struct rte_mbuf ** packets);
 
 unsigned int counter = 0;
 
 volatile sig_atomic_t stop;
 volatile sig_atomic_t pause_;
 
+struct rte_mempool * packets_pool = NULL;
+
 struct port_statistics stats;
 
+#if SEND_MODE == RING
 struct rte_ring *tx_ring = NULL;
+#elif SEND_MODE == ETHERNET
+
+uint8_t portid;
+struct rte_eth_dev_info dev_info;
+/* TODO: verify this setup */
+static const struct rte_eth_conf port_conf = {
+	.rxmode = {
+		.split_hdr_size = 0,
+		.header_split = 0,
+		.hw_ip_checksum = 0,
+		.hw_vlan_filter = 0,
+		.jumbo_frame = 0,
+		.hw_strip_crc = 0,
+	},
+	.txmode = {
+		.mq_mode = ETH_MQ_TX_NONE,
+	},
+};
+
+uint16_t nb_txd = 512;
+
+#else
+#error "bad value for SEND_MODE"
+#endif
+
 
 int main(int argc, char *argv[])
 {
@@ -96,11 +123,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	char tx_ring_name[RTE_RING_NAMESIZE];
-	sprintf(tx_ring_name, "%s_rx", argv[1]);
-	init(tx_ring_name);
-
-	printf("Free count in tx: %d\n", rte_ring_free_count(tx_ring));
+	init(argv[1]);
 
 	signal(SIGALRM, ALARMhandler);
 	alarm(PRINT_INTERVAL);
@@ -114,9 +137,15 @@ int main(int argc, char *argv[])
 #endif
 
 #if ALLOC_METHOD == ALLOC
-	RTE_LOG(INFO, APP, "Alloc method ALLOC.\n");
-#elif ALLOC_METHOD == NO_ALLOC
-	RTE_LOG(INFO, APP, "Alloc method is NO_ALLOC.\n");
+	RTE_LOG(INFO, APP, "SEND_MODE method ALLOC.\n");
+#elif SEND_MODE == NO_ALLOC
+	RTE_LOG(INFO, APP, "SEND_MODE method is NO_ALLOC.\n");
+#endif
+
+#if SEND_MODE == RING
+	RTE_LOG(INFO, APP, "SEND_MODE method RING.\n");
+#elif SEND_MODE == ETHERNET
+	RTE_LOG(INFO, APP, "SEND_MODE method is ETHERNET.\n");
 #endif
 
 	send_loop();
@@ -125,20 +154,69 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void init(char * tx_ring_name)
+#if SEND_MODE == RING
+void init(char * dev_name)
 {
+	char tx_ring_name[RTE_RING_NAMESIZE];
+	sprintf(tx_ring_name, "%s_rx", dev_name);
+
 	if ((tx_ring = rte_ring_lookup(tx_ring_name)) == NULL)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find TX ring\n");
 	}
+
+	RTE_LOG(INFO, APP, "There are %d free slots avaibale in the ring\n",
+		rte_ring_free_count(tx_ring));
+
+	packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
+	if(packets_pool == NULL)
+	{
+		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
+	}
+
+	RTE_LOG(INFO, APP, "There are %d free packets in the pool\n",
+		rte_mempool_count(packets_pool));
 }
+#elif SEND_MODE == ETHERNET
+void init(char * dev_name)
+{
+	/* TODO: get portid from dev_name (first define what is devname) */
+	(void) dev_name;
+
+	int ret;
+
+	/* TODO: verify memory pool creation options */
+	packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
+		0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	if(packets_pool == NULL)
+	{
+		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
+	}
+
+	rte_eth_dev_info_get(portid, &dev_info);
+
+	ret = rte_eth_dev_configure(portid, 1, 1, &port_conf);
+	if(ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot configure device\n");
+
+	ret = rte_eth_tx_queue_setup(portid, 0, nb_txd,
+								rte_eth_dev_socket_id(portid), NULL);
+	if(ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot configure device tx queue\n");
+
+	ret = rte_eth_dev_start(portid);
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot start device\n");
+
+	rte_eth_promiscuous_enable(portid);
+}
+#endif
 
 void send_loop(void)
 {
 	RTE_LOG(INFO, APP, "send_loop()\n");
 
 	char pkt[PKT_SIZE] = {0};
-	struct rte_mempool * packets_pool;
 
 	int retval = 0;
 	(void) retval;
@@ -151,18 +229,6 @@ void send_loop(void)
 	int i;
 	for(i = 0; i < PKT_SIZE; i++)
 		pkt[i] = rand()%256;
-
-
-	packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
-
-	if(packets_pool == NULL)
-	{
-		RTE_LOG(INFO, APP, "rte_errno: %s\n", rte_strerror(rte_errno));
-		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
-	}
-
-	RTE_LOG(INFO, APP, "There are %d free packets in the pool\n",
-		rte_mempool_count(packets_pool));
 
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
 
@@ -192,12 +258,6 @@ void send_loop(void)
 		while(pause_);
 #ifdef USE_BURST
 
-	#if ALLOC_METHOD == NO_ALLOC
-	#elif ALLOC_METHOD == ALLOC
-	#else
-	#error "Bad value for ALLOC_METHOD"
-	#endif
-
 	#if ALLOC_METHOD == ALLOC
 		int n;
 		/* get BURST_SIZE free slots */
@@ -221,7 +281,7 @@ void send_loop(void)
 		#endif
 		}
 
-		send_packets((void **)packets_array);
+		send_packets(packets_array);
 
 		stats.tx += BURST_SIZE;
 
@@ -235,19 +295,22 @@ void send_loop(void)
 #endif
 
 }
-
-inline void send_packets(void ** packets)
+/* send packets (try until all packets are sent) */
+inline void send_packets(struct rte_mbuf ** packets)
 {
-#if SEND_MODE == RING
-	/* enqueue data (try until all the allocated packets are enqueued) */
 	int i = 0;
 	int ntosend = BURST_SIZE;
+#if SEND_MODE == RING
+
 	while(i < ntosend && !stop)
 	{
 		i += rte_ring_enqueue_burst(tx_ring, (void **) &packets[i], ntosend - i);
 	}
 #elif SEND_MODE == ETHERNET
-
+	while(i < ntosend && !stop)
+	{
+		i += rte_eth_tx_burst(portid, 0, &packets[i], ntosend - i);
+	}
 #endif
 }
 
@@ -263,7 +326,6 @@ void ALARMhandler(int sig)
 	switch(counter)
 	{
 		case 0:
-
 		break;
 
 		case 1:
@@ -291,10 +353,10 @@ void print_stats(void)
 	stats.tx = 0;
 #endif
 
-#ifdef CALC_TX_TRIES
-	printf("TX retries:\t%'" PRIu32 "\n", stats.tx_retries);
-	stats.tx_retries = 0;
-#endif
+//#ifdef CALC_TX_TRIES
+//	printf("TX retries:\t%'" PRIu32 "\n", stats.tx_retries);
+//	stats.tx_retries = 0;
+//#endif
 
 #ifdef CALC_ALLOC_STATS
 	printf("Alloc fails:\t%'" PRIu32 "\n", stats.alloc_fails);

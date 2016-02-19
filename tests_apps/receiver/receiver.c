@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include <rte_mbuf.h>
+#include <rte_ethdev.h>
 #include <rte_string_fns.h>
 #include <rte_memzone.h>
 #include <rte_memcpy.h>
@@ -32,13 +33,18 @@
 #define ALLOC 		1	/* allocate and deallocate packets */
 #define NO_ALLOC 	2	/* send the same packets always*/
 
+//Sending methods
+#define RING 		1	/* send packets to rte_rings */
+#define ETHERNET	2	/* send packets to network devices */
+
 #define USE_BURST
 #define BURST_SIZE 32u
 
 #define CALC_RX_STATS
 //#define CALC_FREE_RETRIES
 //#define CALC_CHECKSUM
-#define ALLOC_METHOD NO_ALLOC
+#define ALLOC_METHOD ALLOC
+#define SEND_MODE ETHERNET
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -52,7 +58,7 @@ struct port_statistics {
 
 /* function prototypes */
 void receive_loop(void);
-void init(char * rx_ring_name);	//Performs initialization in the case vm to vm communication
+void init(char * dev_name);
 void print_stats(void);
 void ALARMhandler(int sig);
 void crtl_c_handler(int s);
@@ -64,11 +70,39 @@ volatile sig_atomic_t pause_;
 
 void crtl_c_handler(int s);
 
+struct rte_mempool * packets_pool = NULL;
 struct port_statistics stats = {0};
 
 unsigned int kk = 0;
 
+#if SEND_MODE == RING
 struct rte_ring *rx_ring = NULL;
+#elif SEND_MODE == ETHERNET
+
+uint8_t portid;
+struct rte_eth_dev_info dev_info;
+
+/* TODO: verify this setup */
+static const struct rte_eth_conf port_conf = {
+	.rxmode = {
+		.split_hdr_size = 0,
+		.header_split = 0,
+		.hw_ip_checksum = 0,
+		.hw_vlan_filter = 0,
+		.jumbo_frame = 0,
+		.hw_strip_crc = 0,
+	},
+	.txmode = {
+		.mq_mode = ETH_MQ_TX_NONE,
+	},
+};
+
+uint16_t nb_rxd = 128;
+
+#else
+#error "bad value for SEND_MODE"
+#endif
+
 
 int main(int argc, char *argv[])
 {
@@ -90,11 +124,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	char rx_ring_name[RTE_RING_NAMESIZE];
-	sprintf(rx_ring_name, "%s_tx", argv[1]);
-	init(rx_ring_name);
-
-	printf("Free count in rx: %d\n", rte_ring_free_count(rx_ring));
+	init(argv[1]);
 
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
 
@@ -120,19 +150,70 @@ int main(int argc, char *argv[])
 	RTE_LOG(INFO, APP, "Calc Checksum: no.\n");
 #endif
 
+#if SEND_MODE == RING
+	RTE_LOG(INFO, APP, "SEND_MODE method RING.\n");
+#elif SEND_MODE == ETHERNET
+	RTE_LOG(INFO, APP, "SEND_MODE method is ETHERNET.\n");
+#endif
+
 	receive_loop();	//Receive packets...
 
 	RTE_LOG(INFO, APP, "Done\n");
 	return 0;
 }
 
-void init(char * rx_ring_name)
+#if SEND_MODE == RING
+void init(char * dev_name)
 {
+	char rx_ring_name[RTE_RING_NAMESIZE];
+	sprintf(rx_ring_name, "%s_tx", dev_name);
+
 	if ((rx_ring = rte_ring_lookup(rx_ring_name)) == NULL)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find RX ring\n");
 	}
+
+	packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
+	if(packets_pool == NULL)
+	{
+		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
+	}
+
 }
+#elif SEND_MODE == ETHERNET
+void init(char * dev_name)
+{
+	/* TODO: get portid from dev_name (first define what is devname) */
+	(void) dev_name;
+
+	int ret;
+
+	/* TODO: verify memory pool creation options */
+	packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
+		0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	if(packets_pool == NULL)
+	{
+		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
+	}
+
+	rte_eth_dev_info_get(portid, &dev_info);
+
+	ret = rte_eth_dev_configure(portid, 1, 1, &port_conf);
+	if(ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot configure device\n");
+
+	ret = rte_eth_rx_queue_setup(portid, 0, nb_rxd,
+								rte_eth_dev_socket_id(portid), NULL);
+	if(ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot configure device rx queue\n");
+
+	ret = rte_eth_dev_start(portid);
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot start device\n");
+
+	rte_eth_promiscuous_enable(portid);
+}
+#endif
 
 void receive_loop(void)
 {
@@ -146,12 +227,6 @@ void receive_loop(void)
 	int retval = 0;
 #endif
 
-	struct rte_mempool * packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
-	if(packets_pool == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
-	}
-
 	signal(SIGALRM, ALARMhandler);
 	alarm(PRINT_INTERVAL);
 
@@ -160,8 +235,11 @@ void receive_loop(void)
 	{
 		while(pause_);
 #ifdef USE_BURST
+	#if SEND_MODE == RING
 	nreceived = rte_ring_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
-
+	#elif SEND_MODE == ETHERNET
+	nreceived = rte_eth_rx_burst(portid, 0, packets_array, BURST_SIZE);
+	#endif
 	#ifdef CALC_CHECKSUM
 		for(i = 0; i < nreceived; i++)
 			for(kk = 0; kk < 8; kk++)
@@ -177,37 +255,6 @@ void receive_loop(void)
 
 #else // [NO] USE_BURST
 	#error "No burst is not implemented"
-	//	retval = rte_ring_dequeue(rx_ring, (void **)&mbuf);
-	//	if(retval == 0)
-	//	{
-    //
-	//#ifdef CALC_RX_STATS
-	//		stats.rx++;
-	//#endif
-    //
-	//#ifdef CALC_CHECKSUM
-	//		for(kk = 0; kk < 8; kk++)
-	//			checksum += ((uint64_t *)mbuf->buf_addr)[kk];
-	//#endif
-    //
-	//		//Ok, we read the packet, now it is time to free it
-	//#if ALLOC_METHOD == ALLOC_OVS			//Method 1:
-	//	tryagain:
-	//	retval = rte_ring_enqueue(free_q, (void *) mbuf);
-	//	if(retval == -ENOBUFS)
-	//	{
-	//	#ifdef CALC_FREE_RETRIES
-	//		stats.free_retries++;
-	//	#endif
-	//		if(!stop)
-	//			goto tryagain;
-	//	}
-	//#elif 	ALLOC_METHOD == ALLOC_APP  //Method 2
-	//		//rte_pktmbuf_free(mbuf);
-	//#else
-	//	#error "ALLOC_METHOD has a non valid value"
-	//#endif
-	//	}
 #endif //USE_BURST
 	}	//while
 
@@ -217,7 +264,7 @@ void receive_loop(void)
 
 }	//function
 
-void  ALARMhandler(int sig)
+void ALARMhandler(int sig)
 {
 	(void) sig;
 	signal(SIGALRM, SIG_IGN);          /* ignore this signal       */
