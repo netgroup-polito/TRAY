@@ -88,7 +88,9 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	init(argv[1]);
+	char rx_ring_name[RTE_RING_NAMESIZE];
+	sprintf(rx_ring_name, "%s_tx", argv[1]);
+	init(rx_ring_name);
 
 	printf("Free count in tx: %d\n", rte_ring_free_count(tx_ring));
 
