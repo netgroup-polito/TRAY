@@ -34,6 +34,10 @@
 #define ALLOC 		1	/* allocate and deallocate packets */
 #define NO_ALLOC 	2	/* send the same packets always*/
 
+//Sending methods
+#define RING 		1	/* send packets to rte_rings */
+#define ETHERNET	2	/* send packets to network devices */
+
 /* Configuration */
 #define USE_BURST
 #define BURST_SIZE 32
@@ -43,7 +47,8 @@
 #define CALC_ALLOC_STATS
 //#define CALC_CHECKSUM
 
-#define ALLOC_METHOD NO_ALLOC
+#define ALLOC_METHOD ALLOC
+#define SEND_MODE RING
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -60,6 +65,9 @@ void init(char * tx_ring_name);
 void print_stats(void);
 void ALARMhandler(int sig);
 void crtl_c_handler(int s);
+
+
+inline void send_packets(void ** packets);
 
 unsigned int counter = 0;
 
@@ -146,19 +154,6 @@ void send_loop(void)
 
 
 	packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
-	//Create mempool
-	//struct rte_mempool * packets_pool = rte_mempool_create(
-	//	"packets",
-	//	NUM_PKTS,
-	//	MBUF_SIZE,
-	//	CACHE_SIZE,					//This is the size of the mempool cache
-	//	sizeof(struct rte_pktmbuf_pool_private),
-	//	rte_pktmbuf_pool_init,
-	//	NULL,
-	//	rte_pktmbuf_init,
-	//	NULL,
-	//	rte_socket_id(),
-	//	0 /*NO_FLAGS*/);
 
 	if(packets_pool == NULL)
 	{
@@ -170,19 +165,15 @@ void send_loop(void)
 		rte_mempool_count(packets_pool));
 
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
-	int ntosend;
-	int n;
-	(void) n;
 
 /* prealloc packets */
 #if ALLOC_METHOD == NO_ALLOC
 	#ifdef USE_BURST
+	int n;
 	do
 	{
 		n = rte_mempool_get_bulk(packets_pool, (void **) packets_array, BURST_SIZE);
 	} while(n != 0 && !stop);
-	ntosend = BURST_SIZE;
-
 	#else
 	struct rte_mbuf * mbuf;
 
@@ -207,7 +198,6 @@ void send_loop(void)
 	#error "Bad value for ALLOC_METHOD"
 	#endif
 
-
 	#if ALLOC_METHOD == ALLOC
 		int n;
 		/* get BURST_SIZE free slots */
@@ -215,7 +205,6 @@ void send_loop(void)
 		{
 			n = rte_mempool_get_bulk(packets_pool, (void **) packets_array, BURST_SIZE);
 		} while(n != 0 && !stop);
-		ntosend = BURST_SIZE;
 	#endif
 
 		//Copy data to the buffers
@@ -227,60 +216,17 @@ void send_loop(void)
 			packets_array[i]->data_len = PKT_SIZE;
 
 		#ifdef CALC_CHECKSUM
-			for(i = 0; i < ntosend; i++)
-				for(kk = 0; kk < 8; kk++)
+				for(kk = 0; kk < 8; kk++) /** XXX: HARDCODED value**/
 					checksum += ((uint64_t *)packets_array[i]->buf_addr)[kk];
 		#endif
 		}
 
-		/* enqueue data (try until all the allocated packets are enqueued) */
-		i = 0;
-		while(i < ntosend && !stop)
-		{
-			i += rte_ring_enqueue_burst(tx_ring, (void **) &packets_array[i], ntosend - i);
-		}
+		send_packets((void **)packets_array);
 
-		stats.tx += ntosend;
+		stats.tx += BURST_SIZE;
 
 #else	// [NO] USE_BURST
-
 	#error "NO burst is not implemented"
-
-	//#if DELAY_CYCLES > 0
-	//	//This loop increases mumber of packets per second (don't ask me why)
-	//	unsigned long long j = 0;
-	//	for(j = 0; j < DELAY_CYCLES; j++)
-	//		asm("");
-	//#endif
-    //
-	//	//Copy packet to the correct buffer
-	//	rte_memcpy(mbuf->buf_addr, pkt, PKT_SIZE);
-	//	(void) pkt;
-	//	mbuf->next = NULL;
-	//	mbuf->pkt_len = PKT_SIZE;
-	//	mbuf->data_len = PKT_SIZE;
-    //
-	//#ifdef CALC_CHECKSUM
-	//	for(kk = 0; kk < 8; kk++)
-	//		checksum += ((uint64_t *)mbuf->buf_addr)[kk];
-	//#endif
-    //
-	//	//this method avoids dropping packets:
-	//	//Simple tries until the packet is inserted in the queue
-	//	tryagain:
-	//	retval = rte_ring_enqueue(tx_ring, (void *) mbuf);
-	//	if(retval == -ENOBUFS && !stop)
-	//	{
-	//#ifdef CALC_TX_TRIES
-	//		stats.tx_retries++;
-	//#endif
-	//		goto tryagain;
-	//	}
-    //
-	//#ifdef CALC_TX_STATS
-	//	stats.tx++;
-	//#endif
-
 #endif //USE_BURST
 	}
 
@@ -288,6 +234,21 @@ void send_loop(void)
 	printf("Checksum was %" PRIu64 "\n", checksum);
 #endif
 
+}
+
+inline void send_packets(void ** packets)
+{
+#if SEND_MODE == RING
+	/* enqueue data (try until all the allocated packets are enqueued) */
+	int i = 0;
+	int ntosend = BURST_SIZE;
+	while(i < ntosend && !stop)
+	{
+		i += rte_ring_enqueue_burst(tx_ring, (void **) &packets[i], ntosend - i);
+	}
+#elif SEND_MODE == ETHERNET
+
+#endif
 }
 
 void ALARMhandler(int sig)
