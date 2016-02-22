@@ -97,8 +97,8 @@ static const struct rte_eth_conf port_conf = {
 	},
 };
 
-uint16_t nb_rxd = 128;
-
+static uint16_t nb_rxd = 128;
+static uint16_t nb_txd = 512;
 #else
 #error "bad value for SEND_MODE"
 #endif
@@ -115,8 +115,6 @@ int main(int argc, char *argv[])
 
 	argc -= retval;
 	argv +=  retval;
-
-	RTE_LOG(INFO, APP, "Argc %d!\n", argc);
 
 	if(argc < 1)
 	{
@@ -169,32 +167,27 @@ void init(char * dev_name)
 	sprintf(rx_ring_name, "%s_tx", dev_name);
 
 	if ((rx_ring = rte_ring_lookup(rx_ring_name)) == NULL)
-	{
 		rte_exit(EXIT_FAILURE, "Cannot find RX ring\n");
-	}
 
 	packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
 	if(packets_pool == NULL)
-	{
 		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
-	}
-
 }
 #elif SEND_MODE == ETHERNET
 void init(char * dev_name)
 {
-	/* TODO: get portid from dev_name (first define what is devname) */
-	(void) dev_name;
-
 	int ret;
+
+	/* XXX: is there a better way to get the port id based on the name? */
+	portid = atoi(dev_name);
+
+	RTE_LOG(INFO, APP, "Using ethernet port %d\n", portid);
 
 	/* TODO: verify memory pool creation options */
 	packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
 		0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 	if(packets_pool == NULL)
-	{
 		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
-	}
 
 	rte_eth_dev_info_get(portid, &dev_info);
 
@@ -203,9 +196,14 @@ void init(char * dev_name)
 		rte_exit(EXIT_FAILURE, "Cannot configure device\n");
 
 	ret = rte_eth_rx_queue_setup(portid, 0, nb_rxd,
-								rte_eth_dev_socket_id(portid), NULL);
+			rte_eth_dev_socket_id(portid), NULL, packets_pool);
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device rx queue\n");
+
+	ret = rte_eth_tx_queue_setup(portid, 0, nb_txd,
+				rte_eth_dev_socket_id(portid), NULL);
+	if(ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot configure device tx queue\n");
 
 	ret = rte_eth_dev_start(portid);
 	if (ret < 0)
@@ -219,8 +217,7 @@ void receive_loop(void)
 {
 #ifdef USE_BURST
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
-	int i;
-	(void) i;
+	//int i;
 	int nreceived;
 #else
 	struct rte_mbuf * mbuf;
@@ -231,7 +228,7 @@ void receive_loop(void)
 	alarm(PRINT_INTERVAL);
 
 	signal (SIGINT,crtl_c_handler);
-	while(likely(!stop || (rte_ring_count(rx_ring) != 0)))
+	while(likely(!stop /*|| (rte_ring_count(rx_ring) != 0)*/))
 	{
 		while(pause_);
 #ifdef USE_BURST

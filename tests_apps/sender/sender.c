@@ -43,6 +43,10 @@
 #define USE_BURST
 #define BURST_SIZE 32
 
+#define TX_PTHRESH 36
+#define TX_HTHRESH 0
+#define TX_WTHRESH 0
+
 #define CALC_TX_STATS
 //#define CALC_TX_TRIES
 #define CALC_ALLOC_STATS
@@ -66,7 +70,7 @@ void init(char * dev_name);
 void print_stats(void);
 void ALARMhandler(int sig);
 void crtl_c_handler(int s);
-inline void send_packets(struct rte_mbuf ** packets);
+inline int send_packets(struct rte_mbuf ** packets);
 
 unsigned int counter = 0;
 
@@ -98,8 +102,8 @@ static const struct rte_eth_conf port_conf = {
 	},
 };
 
-uint16_t nb_txd = 512;
-
+static uint16_t nb_rxd = 128;
+static uint16_t nb_txd = 512;
 #else
 #error "bad value for SEND_MODE"
 #endif
@@ -180,14 +184,23 @@ void init(char * dev_name)
 #elif SEND_MODE == ETHERNET
 void init(char * dev_name)
 {
-	/* TODO: get portid from dev_name (first define what is devname) */
-	(void) dev_name;
+	/* XXX: is there a better way to get the port id based on the name? */
+	portid = atoi(dev_name);
 
 	int ret;
 
 	/* TODO: verify memory pool creation options */
 	packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
 		0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	//packets_pool = rte_mempool_create("packets",
+	//									256*1024,
+	//									MBUF_SIZE,
+	//									32,	/*cache size */
+	//									sizeof(struct rte_pktmbuf_pool_private),
+	//									rte_pktmbuf_pool_init, NULL,
+	//									rte_pktmbuf_init, NULL,
+	//									rte_socket_id(), 0);
+
 	if(packets_pool == NULL)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
@@ -200,9 +213,14 @@ void init(char * dev_name)
 		rte_exit(EXIT_FAILURE, "Cannot configure device\n");
 
 	ret = rte_eth_tx_queue_setup(portid, 0, nb_txd,
-								rte_eth_dev_socket_id(portid), NULL);
+								SOCKET_ID_ANY/*rte_eth_dev_socket_id(portid)*/, NULL);
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device tx queue\n");
+
+	ret = rte_eth_rx_queue_setup(portid, 0, nb_rxd,
+			rte_eth_dev_socket_id(portid), NULL, packets_pool);
+	if(ret < 0)
+		rte_exit(EXIT_FAILURE, "Cannot configure device rx queue\n");
 
 	ret = rte_eth_dev_start(portid);
 	if (ret < 0)
@@ -228,7 +246,7 @@ void send_loop(void)
 	//Initializate packet contents
 	int i;
 	for(i = 0; i < PKT_SIZE; i++)
-		pkt[i] = rand()%256;
+		pkt[i] = 0xCC;
 
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
 
@@ -263,14 +281,22 @@ void send_loop(void)
 		/* get BURST_SIZE free slots */
 		do
 		{
+			//unsigned c = rte_mempool_count(packets_pool);
+			//RTE_LOG(INFO, APP, "There are %u free slots avaibale in the pool\n",c );
+			(void) pkt;
 			n = rte_mempool_get_bulk(packets_pool, (void **) packets_array, BURST_SIZE);
+			if(unlikely(n != 0))
+				stats.alloc_fails++;
 		} while(n != 0 && !stop);
 	#endif
 
 		//Copy data to the buffers
 		for(i = 0; i < BURST_SIZE; i++)
 		{
-			rte_memcpy(packets_array[i]->buf_addr, pkt, PKT_SIZE);
+			/* XXX: is this a valid aprroach? */
+			rte_mbuf_refcnt_set(packets_array[i], 1);
+
+			rte_memcpy(rte_pktmbuf_mtod(packets_array[i], void *), pkt, PKT_SIZE);
 			packets_array[i]->next = NULL;
 			packets_array[i]->pkt_len = PKT_SIZE;
 			packets_array[i]->data_len = PKT_SIZE;
@@ -281,9 +307,9 @@ void send_loop(void)
 		#endif
 		}
 
-		send_packets(packets_array);
-
-		stats.tx += BURST_SIZE;
+		stats.tx += send_packets(packets_array);
+		//getchar();
+		//stats.tx += BURST_SIZE;
 
 #else	// [NO] USE_BURST
 	#error "NO burst is not implemented"
@@ -296,21 +322,32 @@ void send_loop(void)
 
 }
 /* send packets (try until all packets are sent) */
-inline void send_packets(struct rte_mbuf ** packets)
+inline int send_packets(struct rte_mbuf ** packets)
 {
+	//int sent;
 	int i = 0;
 	int ntosend = BURST_SIZE;
 #if SEND_MODE == RING
-
 	while(i < ntosend && !stop)
 	{
 		i += rte_ring_enqueue_burst(tx_ring, (void **) &packets[i], ntosend - i);
 	}
+	sent = i;
 #elif SEND_MODE == ETHERNET
 	while(i < ntosend && !stop)
 	{
 		i += rte_eth_tx_burst(portid, 0, &packets[i], ntosend - i);
 	}
+	return BURST_SIZE;
+	//sent = i = rte_eth_tx_burst(portid, 0, packets, ntosend);
+	//if (unlikely(i < ntosend)) {
+	//	//RTE_LOG(INFO, APP, "burst failed %d\n", i);
+	//	do {
+	//		rte_pktmbuf_free(packets[i]);
+	//	} while (++i < ntosend);
+	//}
+    //
+	//return sent;
 #endif
 }
 
