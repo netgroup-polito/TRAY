@@ -39,13 +39,15 @@
 #define RING 		1	/* send packets to rte_rings */
 #define ETHERNET	2	/* send packets to network devices */
 
-/* Configuration */
+/**** Configuration *****/
 #define USE_BURST
 #define BURST_SIZE 32
 
-#define TX_PTHRESH 36
-#define TX_HTHRESH 0
-#define TX_WTHRESH 0
+/*
+ * when defined the sender loops until all the packets of a burst are sent.
+ * Otherwise packets not enqueue are freed
+ */
+#define SEND_FULL_BURST
 
 #define CALC_TX_STATS
 //#define CALC_TX_TRIES
@@ -321,33 +323,57 @@ void send_loop(void)
 #endif
 
 }
-/* send packets (try until all packets are sent) */
+
+/* send packets */
 inline int send_packets(struct rte_mbuf ** packets)
 {
-	//int sent;
 	int i = 0;
 	int ntosend = BURST_SIZE;
 #if SEND_MODE == RING
-	while(i < ntosend && !stop)
+	#ifdef SEND_FULL_BURST
+	do
 	{
+		#ifdef CALC_TX_TRIES
+		stats.tx_retries++;
+		#endif
+
 		i += rte_ring_enqueue_burst(tx_ring, (void **) &packets[i], ntosend - i);
-	}
-	sent = i;
-#elif SEND_MODE == ETHERNET
-	while(i < ntosend && !stop)
-	{
-		i += rte_eth_tx_burst(portid, 0, &packets[i], ntosend - i);
-	}
+		if(unlikely(stop))
+			break;
+	} while(unlikely(i < ntosend));
 	return BURST_SIZE;
-	//sent = i = rte_eth_tx_burst(portid, 0, packets, ntosend);
-	//if (unlikely(i < ntosend)) {
-	//	//RTE_LOG(INFO, APP, "burst failed %d\n", i);
-	//	do {
-	//		rte_pktmbuf_free(packets[i]);
-	//	} while (++i < ntosend);
-	//}
-    //
-	//return sent;
+	#else
+	int sent = i = rte_ring_enqueue_burst(tx_ring, (void **) &packets[i], BURST_SIZE);
+	if (unlikely(i < BURST_SIZE)) {
+		do {
+			rte_pktmbuf_free(packets[i]);
+		} while (++i < BURST_SIZE);
+	}
+	return sent;
+	#endif
+
+#elif SEND_MODE == ETHERNET
+	#ifdef SEND_FULL_BURST
+	do
+	{
+		#ifdef CALC_TX_TRIES
+		stats.tx_retries++;
+		#endif
+
+		i += rte_eth_tx_burst(portid, 0, &packets[i], ntosend - i);
+		if(unlikely(stop))
+			break;
+	} while(unlikely(i < ntosend));
+	return BURST_SIZE;
+	#else
+	int sent = i = rte_eth_tx_burst(tx_ring, (void **) &packets[i], BURST_SIZE);
+	if (unlikely(i < BURST_SIZE)) {
+		do {
+			rte_pktmbuf_free(packets[i]);
+		} while (++i < BURST_SIZE);
+	}
+	return sent;
+	#endif
 #endif
 }
 
