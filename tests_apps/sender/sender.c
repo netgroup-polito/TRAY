@@ -337,7 +337,7 @@ inline int send_packets(struct rte_mbuf ** packets)
 		stats.tx_retries++;
 		#endif
 
-		i += rte_ring_enqueue_burst(tx_ring, (void **) &packets[i], ntosend - i);
+		i += rte_ring_sp_enqueue_burst(tx_ring, (void **) &packets[i], ntosend - i);
 		if(unlikely(stop))
 			break;
 	} while(unlikely(i < ntosend));
@@ -416,10 +416,10 @@ void print_stats(void)
 	stats.tx = 0;
 #endif
 
-//#ifdef CALC_TX_TRIES
-//	printf("TX retries:\t%'" PRIu32 "\n", stats.tx_retries);
-//	stats.tx_retries = 0;
-//#endif
+#ifdef CALC_TX_TRIES
+	printf("TX retries:\t%'" PRIu32 "\n", stats.tx_retries);
+	stats.tx_retries = 0;
+#endif
 
 #ifdef CALC_ALLOC_STATS
 	printf("Alloc fails:\t%'" PRIu32 "\n", stats.alloc_fails);

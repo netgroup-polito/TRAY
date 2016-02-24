@@ -233,13 +233,13 @@ void receive_loop(void)
 		while(pause_);
 #ifdef USE_BURST
 	#if SEND_MODE == RING
-	nreceived = rte_ring_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
+	nreceived = rte_ring_sp_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
 	#elif SEND_MODE == ETHERNET
 	nreceived = rte_eth_rx_burst(portid, 0, packets_array, BURST_SIZE);
 	#endif
 	#ifdef CALC_CHECKSUM
 		for(i = 0; i < nreceived; i++)
-			for(kk = 0; kk < 8; kk++)
+			for(kk = 0; kk < PKT_LEN/8; kk++)
 				checksum += ((uint64_t *)packets_array[i]->buf_addr)[kk];
 	#endif
 
