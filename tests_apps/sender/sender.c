@@ -328,9 +328,9 @@ void send_loop(void)
 inline int send_packets(struct rte_mbuf ** packets)
 {
 	int i = 0;
-	int ntosend = BURST_SIZE;
 #if SEND_MODE == RING
 	#ifdef SEND_FULL_BURST
+	int ntosend = BURST_SIZE;
 	do
 	{
 		#ifdef CALC_TX_TRIES
@@ -343,7 +343,7 @@ inline int send_packets(struct rte_mbuf ** packets)
 	} while(unlikely(i < ntosend));
 	return BURST_SIZE;
 	#else
-	int sent = i = rte_ring_enqueue_burst(tx_ring, (void **) &packets[i], BURST_SIZE);
+	int sent = i = rte_ring_enqueue_burst(tx_ring, (void **) &packets[0], BURST_SIZE);
 	if (unlikely(i < BURST_SIZE)) {
 		do {
 			rte_pktmbuf_free(packets[i]);
@@ -354,6 +354,7 @@ inline int send_packets(struct rte_mbuf ** packets)
 
 #elif SEND_MODE == ETHERNET
 	#ifdef SEND_FULL_BURST
+	int ntosend = BURST_SIZE;
 	do
 	{
 		#ifdef CALC_TX_TRIES
@@ -366,7 +367,7 @@ inline int send_packets(struct rte_mbuf ** packets)
 	} while(unlikely(i < ntosend));
 	return BURST_SIZE;
 	#else
-	int sent = i = rte_eth_tx_burst(tx_ring, (void **) &packets[i], BURST_SIZE);
+	int sent = i = rte_eth_tx_burst(portid, 0, &packets[0], BURST_SIZE);
 	if (unlikely(i < BURST_SIZE)) {
 		do {
 			rte_pktmbuf_free(packets[i]);
