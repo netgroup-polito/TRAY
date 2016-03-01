@@ -3,6 +3,7 @@
 
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
+#include <rte_ring.h>
 #include <rte_string_fns.h>
 #include <rte_memzone.h>
 #include <rte_memcpy.h>
@@ -233,7 +234,7 @@ void receive_loop(void)
 		while(pause_);
 #ifdef USE_BURST
 	#if SEND_MODE == RING
-	nreceived = rte_ring_sp_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
+	nreceived = rte_ring_sc_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
 	#elif SEND_MODE == ETHERNET
 	nreceived = rte_eth_rx_burst(portid, 0, packets_array, BURST_SIZE);
 	#endif
