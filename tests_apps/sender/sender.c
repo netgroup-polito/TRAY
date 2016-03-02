@@ -260,6 +260,15 @@ void send_loop(void)
 	{
 		n = rte_mempool_get_bulk(packets_pool, (void **) packets_array, BURST_SIZE);
 	} while(n != 0 && !stop);
+
+	for(i = 0; i < BURST_SIZE; i++)
+	{
+		rte_memcpy(rte_pktmbuf_mtod(packets_array[i], void *), pkt, PKT_SIZE);
+		packets_array[i]->next = NULL;
+		packets_array[i]->pkt_len = PKT_SIZE;
+		packets_array[i]->data_len = PKT_SIZE;
+	}
+
 	#else
 	struct rte_mbuf * mbuf;
 
@@ -290,7 +299,7 @@ void send_loop(void)
 			if(unlikely(n != 0))
 				stats.alloc_fails++;
 		} while(n != 0 && !stop);
-	#endif
+
 
 		//Copy data to the buffers
 		for(i = 0; i < BURST_SIZE; i++)
@@ -308,7 +317,7 @@ void send_loop(void)
 					checksum += ((uint64_t *)packets_array[i]->buf_addr)[kk];
 		#endif
 		}
-
+	#endif
 		stats.tx += send_packets(packets_array);
 		//getchar();
 		//stats.tx += BURST_SIZE;
