@@ -31,7 +31,6 @@
 #define PRINT_INTERVAL 1
 
 //Allocation methods
-#define ALLOC_OVS 1		//Use the queues to allocate/free packets
 #define ALLOC_APP 2		//Allocate free packets directly in the application
 
 /* Configuration */
@@ -64,10 +63,6 @@ volatile sig_atomic_t pause_;
 
 struct rte_ring *tx_ring = NULL;
 struct rte_ring *rx_ring = NULL;
-
-#if ALLOC_METHOD == ALLOC_OVS
-struct rte_ring *alloc_q = NULL;
-#endif
 
 int main(int argc, char *argv[])
 {
@@ -103,11 +98,7 @@ int main(int argc, char *argv[])
 
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
 
-#if ALLOC_METHOD == ALLOC_OVS
-	RTE_LOG(INFO, APP, "Alloc method is OVS.\n");
-#elif ALLOC_METHOD == ALLOC_APP
 	RTE_LOG(INFO, APP, "Alloc method is APP.\n");
-#endif
 
 	send_loop();
 
@@ -126,13 +117,6 @@ void init(char * tx_ring_name, char * rx_ring_name)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find RX ring\n");
 	}
-
-#if ALLOC_METHOD == ALLOC_OVS
-	if ((alloc_q = rte_ring_lookup("recycling_queue")) == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find alloc ring\n");
-	}
-#endif
 }
 
 void send_loop(void)
@@ -179,11 +163,7 @@ void send_loop(void)
 	{
 		while(pause_);
 
-
-#if ALLOC_METHOD == ALLOC_OVS
-		//Try to get BURS_SIZE free slots
-		ntosend = rte_ring_dequeue_burst(alloc_q, (void **) packets_array, BURST_SIZE);
-#elif ALLOC_METHOD == ALLOC_APP
+#if ALLOC_METHOD == ALLOC_APP
 		//do
 		//{
 		//	n = rte_mempool_get_bulk(packets_pool, (void **) packets_array, BURST_SIZE);
