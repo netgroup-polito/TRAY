@@ -22,7 +22,7 @@
 
 /* function prototypes */
 void send_receive_loop(void);
-void init(char * port1, char * port2);
+void init(char * dev_name);
 void crtl_c_handler(int s);
 inline int send_packets(struct rte_mbuf ** packets);
 
@@ -59,8 +59,7 @@ struct rte_ring *tx_ring = NULL;
 
 #elif SEND_MODE == ETHERNET
 
-uint8_t txport;
-uint8_t rxport;
+uint8_t portid;
 
 struct rte_eth_dev_info dev_info;
 /* TODO: verify this setup */
@@ -94,11 +93,11 @@ int main(int argc, char *argv[])
 
 	if(argc < 2)
 	{
-		RTE_LOG(INFO, APP, "usage: -- tx rx\n");
+		RTE_LOG(INFO, APP, "usage: -- port\n");
 		return 0;
 	}
 
-	init(argv[1], argv[2]);
+	init(argv[1]);
 
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
 
@@ -111,14 +110,14 @@ int main(int argc, char *argv[])
 }
 
 #if SEND_MODE == RING
-void init(char * tx, char * rx)
+void init(char * dev_name)
 {
 	char ring_tx[RTE_RING_NAMESIZE];
 	char ring_rx[RTE_RING_NAMESIZE];
 
 	/* be aware that ring name is in ovs point of view */
-	sprintf(ring_rx, "%s_tx", rx);
-	sprintf(ring_tx, "%s_rx", tx);
+	sprintf(ring_rx, "%s_tx", dev_name);
+	sprintf(ring_tx, "%s_rx", dev_name);
 
 	if ((rx_ring = rte_ring_lookup(ring_rx)) == NULL)
 	{
@@ -132,14 +131,12 @@ void init(char * tx, char * rx)
 }
 #elif SEND_MODE == ETHERNET
 
-void init(char * tx, char * rx)
+void init(char * dev_name)
 {
 	int ret;
 
-	/** first port **/
-
 	/* XXX: is there a better way to get the port id based on the name? */
-	txport = atoi(tx);
+	portid = atoi(dev_name);
 
 	/* TODO: verify memory pool creation options */
 	packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
@@ -150,60 +147,27 @@ void init(char * tx, char * rx)
 		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
 	}
 
-	rte_eth_dev_info_get(txport, &dev_info);
+	rte_eth_dev_info_get(portid, &dev_info);
 
-	ret = rte_eth_dev_configure(txport, 1, 1, &port_conf);
+	ret = rte_eth_dev_configure(portid, 1, 1, &port_conf);
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device\n");
 
-	ret = rte_eth_tx_queue_setup(txport, 0, nb_txd,
+	ret = rte_eth_tx_queue_setup(portid, 0, nb_txd,
 								SOCKET_ID_ANY/*rte_eth_dev_socket_id(portid1)*/, NULL);
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device tx queue\n");
 
-	ret = rte_eth_rx_queue_setup(txport, 0, nb_rxd,
-			rte_eth_dev_socket_id(txport), NULL, packets_pool);
+	ret = rte_eth_rx_queue_setup(portid, 0, nb_rxd,
+			rte_eth_dev_socket_id(portid), NULL, packets_pool);
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device rx queue\n");
 
-	ret = rte_eth_dev_start(txport);
+	ret = rte_eth_dev_start(portid);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot start device\n");
 
-	rte_eth_promiscuous_enable(txport);
-
-	/** second port **/
-
-	/* XXX: is there a better way to get the port id based on the name? */
-	rxport = atoi(rx);
-
-	if(packets_pool == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
-	}
-
-	rte_eth_dev_info_get(rxport, &dev_info);
-
-	ret = rte_eth_dev_configure(rxport, 1, 1, &port_conf);
-	if(ret < 0)
-		rte_exit(EXIT_FAILURE, "Cannot configure device\n");
-
-	ret = rte_eth_tx_queue_setup(rxport, 0, nb_txd,
-								SOCKET_ID_ANY/*rte_eth_dev_socket_id(portid2)*/, NULL);
-	if(ret < 0)
-		rte_exit(EXIT_FAILURE, "Cannot configure device tx queue\n");
-
-	ret = rte_eth_rx_queue_setup(rxport, 0, nb_rxd,
-			rte_eth_dev_socket_id(rxport), NULL, packets_pool);
-	if(ret < 0)
-		rte_exit(EXIT_FAILURE, "Cannot configure device rx queue\n");
-
-	ret = rte_eth_dev_start(rxport);
-	if (ret < 0)
-		rte_exit(EXIT_FAILURE, "Cannot start device\n");
-
-	rte_eth_promiscuous_enable(rxport);
-
+	rte_eth_promiscuous_enable(portid);
 }
 #endif
 
@@ -244,13 +208,13 @@ inline int send_packets(struct rte_mbuf ** packets)
 		stats.tx_retries++;
 		#endif
 
-		i += rte_eth_tx_burst(txport, 0, &packets[i], ntosend - i);
+		i += rte_eth_tx_burst(portid, 0, &packets[i], ntosend - i);
 		if(unlikely(stop))
 			break;
 	} while(unlikely(i < ntosend));
 	return BURST_SIZE;
 	#else
-	int sent = i = rte_eth_tx_burst(txport, 0, &packets[0], BURST_SIZE);
+	int sent = i = rte_eth_tx_burst(portid, 0, &packets[0], BURST_SIZE);
 	if (unlikely(i < BURST_SIZE)) {
 		do {
 			rte_pktmbuf_free(packets[i]);
@@ -334,7 +298,7 @@ void send_receive_loop(void)
 #if SEND_MODE == RING
 		nreceived = rte_ring_sc_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
 #elif SEND_MODE == ETHERNET
-		nreceived = rte_eth_rx_burst(rxport, 0, packets_array, BURST_SIZE);
+		nreceived = rte_eth_rx_burst(portid, 0, packets_array, BURST_SIZE);
 #endif
 #ifdef CALC_CHECKSUM
 		for(i = 0; i < nreceived; i++)
