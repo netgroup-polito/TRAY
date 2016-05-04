@@ -26,7 +26,6 @@
 #define RTE_LOGTYPE_APP         RTE_LOGTYPE_USER1
 
 #define PKT_SIZE 64
-//#define	NUM_PKTS 1000
 #define MBUF_SIZE (PKT_SIZE + sizeof(struct rte_mbuf) + RTE_PKTMBUF_HEADROOM)
 
 #define PRINT_INTERVAL 1
@@ -36,7 +35,6 @@
 #define ALLOC_APP 2		//Allocate free packets directly in the application
 
 /* Configuration */
-#define USE_BURST
 #define BURST_SIZE 32
 
 #define CALC_TX_STATS
@@ -104,12 +102,6 @@ int main(int argc, char *argv[])
 	alarm(PRINT_INTERVAL);
 
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
-
-#ifdef USE_BURST
-	RTE_LOG(INFO, APP, "Burst Enabled.\n");
-#else
-	RTE_LOG(INFO, APP, "Burst Disabled.\n");
-#endif
 
 #if ALLOC_METHOD == ALLOC_OVS
 	RTE_LOG(INFO, APP, "Alloc method is OVS.\n");
@@ -191,7 +183,7 @@ void send_loop(void)
 
 #endif
 
-#ifdef USE_BURST
+
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
 	struct rte_mbuf * packets_array_rx[BURST_SIZE] = {0};
 	int ntosend;
@@ -205,35 +197,26 @@ void send_loop(void)
 	} while(n != 0 && !stop);
 	ntosend = BURST_SIZE;
 
-#else
-	struct rte_mbuf * mbuf;
-	/* prealloc packet */
-	do {
-		mbuf = rte_pktmbuf_alloc(packets_pool);
-	} while(mbuf == NULL);
-
-#endif
-
 	RTE_LOG(INFO, APP, "Starting sender loop\n");
 	signal (SIGINT, crtl_c_handler);
 	stop = 0;
 	while(likely(!stop))
 	{
 		while(pause_);
-#ifdef USE_BURST
 
-	#if ALLOC_METHOD == ALLOC_OVS
+
+#if ALLOC_METHOD == ALLOC_OVS
 		//Try to get BURS_SIZE free slots
 		ntosend = rte_ring_dequeue_burst(alloc_q, (void **) packets_array, BURST_SIZE);
-	#elif ALLOC_METHOD == ALLOC_APP
+#elif ALLOC_METHOD == ALLOC_APP
 		//do
 		//{
 		//	n = rte_mempool_get_bulk(packets_pool, (void **) packets_array, BURST_SIZE);
 		//} while(n != 0 && !stop);
 		//ntosend = BURST_SIZE;
-	#else
+#else
 		#error "No implemented"
-	#endif
+#endif
 
 		//Copy data to the buffers
 		for(i = 0; i < ntosend; i++)
@@ -261,71 +244,6 @@ void send_loop(void)
 			nreceived= rte_ring_dequeue_burst(rx_ring, (void **) packets_array_rx, BURST_SIZE);
 			rx += nreceived; /* update statistics */
 		}
-
-#else	// [NO] USE_BURST
-	#if ALLOC_METHOD  == ALLOC_OVS //Method 1
-		//Read a buffer to be used as a buffer for a packet
-		retval = rte_ring_dequeue(alloc_q, (void **)&mbuf);
-		if(retval != 0)
-		{
-		#ifdef CALC_ALLOC_STATS
-			//stats.alloc_fails++;
-		#endif
-			continue;
-		}
-	#elif ALLOC_METHOD  == ALLOC_APP //Method 2
-		//mbuf = rte_pktmbuf_alloc(packets_pool);
-		//if(mbuf == NULL)
-		//{
-		//#ifdef CALC_ALLOC_STATS
-		//	stats.alloc_fails++;
-		//#endif
-		//	continue;
-		//}
-	#else
-		#error "ALLOC_METHOD has a non valid value"
-	#endif
-
-	#if DELAY_CYCLES > 0
-		//This loop increases mumber of packets per second (don't ask me why)
-		unsigned long long j = 0;
-		for(j = 0; j < DELAY_CYCLES; j++)
-			asm("");
-	#endif
-
-		//Copy packet to the correct buffer
-		rte_memcpy(mbuf->buf_addr, pkt, PKT_SIZE);
-		//fill_packet(mbuf->pkt.data);
-		//mbuf->pkt.next = NULL;
-		//mbuf->pkt.pkt_len = PKT_SIZE;
-		//mbuf->pkt.data_len = PKT_SIZE;
-		(void) pkt;
-		mbuf->next = NULL;
-		mbuf->pkt_len = PKT_SIZE;
-		mbuf->data_len = PKT_SIZE;
-
-	#ifdef CALC_CHECKSUM
-		for(kk = 0; kk < 8; kk++)
-			checksum += ((uint64_t *)mbuf->buf_addr)[kk];
-	#endif
-
-		//this method avoids dropping packets:
-		//Simple tries until the packet is inserted in the queue
-		tryagain:
-		retval = rte_ring_enqueue(tx_ring, (void *) mbuf);
-		if(retval == -ENOBUFS && !stop)
-		{
-	#ifdef CALC_TX_TRIES
-			//stats.tx_retries++;
-	#endif
-			goto tryagain;
-		}
-
-	#ifdef CALC_TX_STATS
-		//stats.tx++;
-	#endif
-
-#endif //USE_BURST
 	}
 
 #ifdef CALC_CHECKSUM
