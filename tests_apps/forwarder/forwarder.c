@@ -15,7 +15,6 @@
 
 #define RTE_LOGTYPE_APP         RTE_LOGTYPE_USER1
 
-#define USE_BURST
 #define BURST_SIZE 32u
 
 /* function prototypes */
@@ -85,12 +84,6 @@ int main(int argc, char *argv[])
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
 
 /* Print information about all the flags! */
-
-#ifdef USE_BURST
-	RTE_LOG(INFO, APP, "Burst: Enabled.\n");
-#else
-	RTE_LOG(INFO, APP, "Burst: Disabled.\n");
-#endif
 
 	forward_loop();	//Forward packets...
 
@@ -222,20 +215,16 @@ void init(char * port1, char * port2)
 void forward_loop(void)
 {
 	unsigned rx_pkts;
-#ifdef USE_BURST
+
 	struct rte_mbuf * pkts[BURST_SIZE] = {0};
 #if SEND_MODE == RING
 	int rslt = 0;
 #endif
 
-#else
-	struct rte_mbuf * mbuf;
-#endif
-
 	signal (SIGINT,crtl_c_handler);
 
 /* code from ovs_client.c in ovs repository */
-#ifdef USE_BURST
+
 	while(likely(!stop))
 	{
 		 /*
@@ -283,10 +272,6 @@ void forward_loop(void)
 		//	} while (rslt == -ENOBUFS);
 		//}
 	}
-#else // [NO] USE_BURST
-	#error "No implemented"
-#endif //USE_BURST
-
 }
 
 void crtl_c_handler(int s)
