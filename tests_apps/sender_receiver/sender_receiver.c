@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
+#include <time.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include <rte_mbuf.h>
 #include <rte_memzone.h>
@@ -18,13 +21,19 @@
 #define PKT_SIZE 64
 #define MBUF_SIZE (PKT_SIZE + sizeof(struct rte_mbuf) + RTE_PKTMBUF_HEADROOM)
 
+#define PRINT_INTERVAL 1
+
 #define BURST_SIZE 32
 
 /* function prototypes */
 void send_receive_loop(void);
 void init(char * dev_name);
 void crtl_c_handler(int s);
+void ALARMhandler(int sig);
 inline int send_packets(struct rte_mbuf ** packets);
+void print_stats(void);
+
+unsigned int counter = 0;
 
 volatile sig_atomic_t stop;
 volatile sig_atomic_t pause_;
@@ -139,9 +148,9 @@ void init(char * dev_name)
 	portid = atoi(dev_name);
 
 	/* TODO: verify memory pool creation options */
-	packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
-		0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
-
+	//packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
+	//	0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	packets_pool = rte_mempool_lookup("ovs_mp_2030_0_262144");
 	if(packets_pool == NULL)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
@@ -320,4 +329,62 @@ void crtl_c_handler(int s)
 	(void) s; /* Avoid compile warning */
 	printf("Requesting stop.\n");
 	stop = 1;
+}
+
+
+void print_stats(void)
+{
+
+#ifdef CALC_RX_STATS
+	printf("RX Packets:\t%'" PRIu32 "\n", stats.rx);
+	stats.rx = 0;
+#endif
+
+#ifdef CALC_TX_STATS
+	printf("TX Packets:\t%'" PRIu32 "\n", stats.tx);
+	stats.tx = 0;
+#endif
+
+#ifdef CALC_TX_TRIES
+	printf("TX retries:\t%'" PRIu32 "\n", stats.tx_retries);
+	stats.tx_retries = 0;
+#endif
+
+#ifdef CALC_ALLOC_STATS
+	printf("Alloc fails:\t%'" PRIu32 "\n", stats.alloc_fails);
+	stats.alloc_fails = 0;
+#endif
+
+	printf("\n");
+}
+
+void ALARMhandler(int sig)
+{
+	(void) sig;
+	signal(SIGALRM, SIG_IGN);          /* ignore this signal       */
+	if(!pause_)
+		print_stats();
+	signal(SIGALRM, ALARMhandler);     /* reinstall the handler    */
+	alarm(PRINT_INTERVAL);
+
+	switch(counter)
+	{
+		case 0:
+		break;
+
+		case 1:
+			pause_ = !pause_;
+			if(pause_)
+				printf("Pausing...\n");
+			else
+				printf("Resumming...\n");
+		break;
+
+		default:
+			stop = 1;
+			pause_ = 0;
+		break;
+	}
+
+	counter = 0;
 }
