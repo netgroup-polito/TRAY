@@ -231,7 +231,7 @@ void forward_loop(void)
 		 * Try dequeuing max possible packets first, if that fails, get the
 		 * most we can. Loop body should only execute once, maximum.
 		 */
-	#if SEND_MODE == RING
+#if SEND_MODE == RING
 		rx_pkts = BURST_SIZE;
 		while (unlikely(rte_ring_dequeue_bulk(rx_ring1, (void **) pkts, rx_pkts) != 0) &&
 			rx_pkts > 0)
@@ -246,7 +246,23 @@ void forward_loop(void)
 			} while (rslt == -ENOBUFS);
 		}
 
-	#elif SEND_MODE == ETHERNET
+		/* do the same in the other sense */
+		rx_pkts = BURST_SIZE;
+		while (unlikely(rte_ring_dequeue_bulk(rx_ring2, (void **) pkts, rx_pkts) != 0) &&
+			rx_pkts > 0)
+		{
+			rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring2), BURST_SIZE);
+		}
+
+		if (rx_pkts > 0) {
+			/* blocking enqueue */
+			do {
+				rslt = rte_ring_enqueue_bulk(tx_ring1, (void **) pkts, rx_pkts);
+			} while (rslt == -ENOBUFS);
+		}
+
+
+#elif SEND_MODE == ETHERNET
 		rx_pkts = rte_eth_rx_burst(portid1, 0, pkts, BURST_SIZE);
 
 		if (rx_pkts > 0) {
@@ -255,22 +271,18 @@ void forward_loop(void)
 				rx_pkts -= rte_eth_tx_burst(portid2, 0, &pkts[0], rx_pkts);
 			} while (rx_pkts > 0);
 		}
-	#endif
 
-		///* do the same in the other sense */
-		//rx_pkts = BURST_SIZE;
-		//while (unlikely(rte_ring_dequeue_bulk(rx_ring2, pkts, rx_pkts) != 0) &&
-		//	rx_pkts > 0)
-		//{
-		//	rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring2), BURST_SIZE);
-		//}
-        //
-		//if (rx_pkts > 0) {
-		//	/* blocking enqueue */
-		//	do {
-		//		rslt = rte_ring_enqueue_bulk(tx_ring1, pkts, rx_pkts);
-		//	} while (rslt == -ENOBUFS);
-		//}
+		/* do the same in the other sense */
+		rx_pkts = rte_eth_rx_burst(portid2, 0, pkts, BURST_SIZE);
+
+		if (rx_pkts > 0) {
+			/* blocking enqueue */
+			do {
+				rx_pkts -= rte_eth_tx_burst(portid1, 0, &pkts[0], rx_pkts);
+			} while (rx_pkts > 0);
+		}
+#endif
+
 	}
 }
 
