@@ -269,6 +269,9 @@ void send_receive_loop(void)
 
 	signal (SIGINT,crtl_c_handler);
 
+	signal(SIGALRM, ALARMhandler);
+	alarm(PRINT_INTERVAL);
+
 	while(likely(!stop))
 	{
 		while(pause_);
