@@ -138,40 +138,17 @@ void init(char * tx_ring_name, char * rx_ring_name)
 void send_loop(void)
 {
 	RTE_LOG(INFO, APP, "send_loop()\n");
-	char pkt[PKT_SIZE] = {0};
 	int nreceived;
 
 	int retval = 0;
+	int i;
 	(void) retval;
 #ifdef CALC_CHECKSUM
 	unsigned int kk = 0;
 #endif
-	srand(time(NULL));
-
-	//Initializate packet contents
-	int i;
-	for(i = 0; i < PKT_SIZE; i++)
-		pkt[i] = rand()%256;
 
 #if ALLOC_METHOD == ALLOC_APP
 	struct rte_mempool * packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
-	//struct rte_mempool * packets_pool = rte_mempool_lookup("packets");
-
-	//Create mempool
-	//struct rte_mempool * packets_pool = rte_mempool_create(
-	//	"packets",
-	//	NUM_PKTS,
-	//	MBUF_SIZE,
-	//	CACHE_SIZE,					//This is the size of the mempool cache
-	//	sizeof(struct rte_pktmbuf_pool_private),
-	//	rte_pktmbuf_pool_init,
-	//	NULL,
-	//	rte_pktmbuf_init,
-	//	NULL,
-	//	rte_socket_id(),
-	//	0 /*NO_FLAGS*/);
-
-
 	if(packets_pool == NULL)
 	{
 		RTE_LOG(INFO, APP, "rte_errno: %s\n", rte_strerror(rte_errno));
@@ -180,9 +157,7 @@ void send_loop(void)
 
 	RTE_LOG(INFO, APP, "There are %d free packets in the pool\n",
 		rte_mempool_count(packets_pool));
-
 #endif
-
 
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
 	struct rte_mbuf * packets_array_rx[BURST_SIZE] = {0};
@@ -217,22 +192,6 @@ void send_loop(void)
 #else
 		#error "No implemented"
 #endif
-
-		//Copy data to the buffers
-		for(i = 0; i < ntosend; i++)
-		{
-			rte_memcpy(packets_array[i]->buf_addr, pkt, PKT_SIZE);
-			//fill_packet(packets_array[i]->pkt.data);
-			packets_array[i]->next = NULL;
-			packets_array[i]->pkt_len = PKT_SIZE;
-			packets_array[i]->data_len = PKT_SIZE;
-
-		#ifdef CALC_CHECKSUM
-			for(i = 0; i < ntosend; i++)
-				for(kk = 0; kk < 8; kk++)
-					checksum += ((uint64_t *)packets_array[i]->buf_addr)[kk];
-		#endif
-		}
 
 		//Enqueue data (try until all the allocated packets are enqueue)
 		i = 0;
