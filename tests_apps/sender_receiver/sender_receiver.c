@@ -26,6 +26,8 @@
 
 #define BURST_SIZE 32
 
+#define CALC_RX_STATS
+
 /* function prototypes */
 void send_receive_loop(void);
 void init(char * dev_name);
@@ -33,6 +35,9 @@ void crtl_c_handler(int s);
 void ALARMhandler(int sig);
 inline int send_packets(struct rte_mbuf ** packets);
 void print_stats(void);
+void print_final_stats(void);
+
+static uint64_t rx_vec[4];
 
 unsigned int counter = 0;
 
@@ -116,6 +121,8 @@ int main(int argc, char *argv[])
 /* Print information about all the flags! */
 
 	send_receive_loop();	//Forward packets...
+
+	print_final_stats();
 
 	RTE_LOG(INFO, APP, "Done\n");
 	return 0;
@@ -337,12 +344,28 @@ void crtl_c_handler(int s)
 	stop = 1;
 }
 
+void print_final_stats(void)
+{
+	uint64_t totalrx = 0;
+	int i = 0;
+	for(i = 0 ; i < 4; i++)
+		totalrx = rx_vec[i];
+
+	totalrx  = totalrx/4;
+
+	printf("*****total rx:%'" PRIu64 "**********\n", totalrx);
+}
+
 
 void print_stats(void)
 {
 
 #ifdef CALC_RX_STATS
+	static int i = 0;
 	printf("RX Packets:\t%'" PRIu32 "\n", stats.rx);
+
+	rx_vec[i++] = stats.rx;
+	i %= 4;
 	stats.rx = 0;
 #endif
 
