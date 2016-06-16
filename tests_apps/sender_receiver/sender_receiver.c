@@ -349,7 +349,7 @@ void print_final_stats(void)
 	uint64_t totalrx = 0;
 	int i = 0;
 	for(i = 0 ; i < 4; i++)
-		totalrx = rx_vec[i];
+		totalrx += rx_vec[i];
 
 	totalrx  = totalrx/4;
 
@@ -362,9 +362,11 @@ void print_stats(void)
 
 #ifdef CALC_RX_STATS
 	static int i = 0;
+	static uint32_t p = 0;
 	printf("RX Packets:\t%'" PRIu32 "\n", stats.rx);
 
-	rx_vec[i++] = stats.rx;
+	rx_vec[i++] = p;
+	p = stats.rx;
 	i %= 4;
 	stats.rx = 0;
 #endif
