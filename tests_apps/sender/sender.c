@@ -183,18 +183,9 @@ void init(char * dev_name)
 
 	int ret;
 
-	/* TODO: verify memory pool creation options */
-	packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
-		0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
-	//packets_pool = rte_mempool_create("packets",
-	//									256*1024,
-	//									MBUF_SIZE,
-	//									32,	/*cache size */
-	//									sizeof(struct rte_pktmbuf_pool_private),
-	//									rte_pktmbuf_pool_init, NULL,
-	//									rte_pktmbuf_init, NULL,
-	//									rte_socket_id(), 0);
-
+	//packets_pool = rte_pktmbuf_pool_create("packets", 256*1024, 32,
+	//	0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	packets_pool = rte_mempool_lookup("ovs_mp_2030_0_262144");
 	if(packets_pool == NULL)
 	{
 		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
