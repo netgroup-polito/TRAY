@@ -28,7 +28,7 @@ void crtl_c_handler(int s);
 //Sending methods
 #define RING 		1	/* send packets to rte_rings */
 #define ETHERNET	2	/* send packets to network devices */
-#define SEND_MODE RING
+#define SEND_MODE ETHERNET
 
 
 #if SEND_MODE == RING
