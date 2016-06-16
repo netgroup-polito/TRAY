@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <locale.h>
 
 #include <rte_mbuf.h>
 #include <rte_memzone.h>
