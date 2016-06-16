@@ -92,6 +92,8 @@ static uint16_t nb_txd = 512;
 
 int main(int argc, char *argv[])
 {
+	setlocale(LC_NUMERIC, "en_US.utf-8");
+
 	int retval = 0;
 
 	if ((retval = rte_eal_init(argc, argv)) < 0)
@@ -200,11 +202,11 @@ inline int send_packets(struct rte_mbuf ** packets)
 	return BURST_SIZE;
 	#else
 	int sent = i = rte_ring_enqueue_burst(tx_ring, (void **) &packets[0], BURST_SIZE);
-	if (unlikely(i < BURST_SIZE)) {
-		do {
-			rte_pktmbuf_free(packets[i]);
-		} while (++i < BURST_SIZE);
-	}
+	//if (unlikely(i < BURST_SIZE)) {
+	//	do {
+	//		rte_pktmbuf_free(packets[i]);
+	//	} while (++i < BURST_SIZE);
+	//}
 	return sent;
 	#endif
 
