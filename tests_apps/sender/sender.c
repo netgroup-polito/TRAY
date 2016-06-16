@@ -39,8 +39,6 @@
 #define RING 		1	/* send packets to rte_rings */
 #define ETHERNET	2	/* send packets to network devices */
 
-/**** Configuration *****/
-#define USE_BURST
 #define BURST_SIZE 32
 
 /*
@@ -135,12 +133,6 @@ int main(int argc, char *argv[])
 	alarm(PRINT_INTERVAL);
 
 	RTE_LOG(INFO, APP, "Finished Process Init.\n");
-
-#ifdef USE_BURST
-	RTE_LOG(INFO, APP, "Burst Enabled.\n");
-#else
-	RTE_LOG(INFO, APP, "Burst Disabled.\n");
-#endif
 
 #if ALLOC_METHOD == ALLOC
 	RTE_LOG(INFO, APP, "SEND_MODE method ALLOC.\n");
@@ -254,7 +246,6 @@ void send_loop(void)
 
 /* prealloc packets */
 #if ALLOC_METHOD == NO_ALLOC
-	#ifdef USE_BURST
 	int n;
 	do
 	{
@@ -268,15 +259,6 @@ void send_loop(void)
 		packets_array[i]->pkt_len = PKT_SIZE;
 		packets_array[i]->data_len = PKT_SIZE;
 	}
-
-	#else
-	struct rte_mbuf * mbuf;
-
-	do {
-		mbuf = rte_pktmbuf_alloc(packets_pool);
-	} while(mbuf == NULL);
-
-	#endif
 #endif
 
 	RTE_LOG(INFO, APP, "Starting sender loop\n");
@@ -285,7 +267,6 @@ void send_loop(void)
 	while(likely(!stop))
 	{
 		while(pause_);
-#ifdef USE_BURST
 
 	#if ALLOC_METHOD == ALLOC
 		int n;
@@ -321,10 +302,6 @@ void send_loop(void)
 		stats.tx += send_packets(packets_array);
 		//getchar();
 		//stats.tx += BURST_SIZE;
-
-#else	// [NO] USE_BURST
-	#error "NO burst is not implemented"
-#endif //USE_BURST
 	}
 
 #ifdef CALC_CHECKSUM

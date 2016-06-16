@@ -38,12 +38,9 @@
 #define RING 		1	/* send packets to rte_rings */
 #define ETHERNET	2	/* send packets to network devices */
 
-#define USE_BURST
 #define BURST_SIZE 32u
 
 #define CALC_RX_STATS
-//#define CALC_FREE_RETRIES
-//#define CALC_CHECKSUM
 #define ALLOC_METHOD ALLOC
 #define SEND_MODE ETHERNET
 
@@ -129,12 +126,6 @@ int main(int argc, char *argv[])
 
 //Print information about all the flags!
 
-#ifdef USE_BURST
-	RTE_LOG(INFO, APP, "Burst: Enabled.\n");
-#else
-	RTE_LOG(INFO, APP, "Burst: Disabled.\n");
-#endif
-
 #if ALLOC_METHOD == ALLOC
 	RTE_LOG(INFO, APP, "Alloc method: ALLOC.\n");
 #elif ALLOC_METHOD == NO_ALLOC
@@ -216,14 +207,10 @@ void init(char * dev_name)
 
 void receive_loop(void)
 {
-#ifdef USE_BURST
+
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
 	//int i;
 	int nreceived;
-#else
-	struct rte_mbuf * mbuf;
-	int retval = 0;
-#endif
 
 	signal(SIGALRM, ALARMhandler);
 	alarm(PRINT_INTERVAL);
@@ -232,7 +219,7 @@ void receive_loop(void)
 	while(likely(!stop /*|| (rte_ring_count(rx_ring) != 0)*/))
 	{
 		while(pause_);
-#ifdef USE_BURST
+
 	#if SEND_MODE == RING
 	nreceived = rte_ring_sc_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
 	#elif SEND_MODE == ETHERNET
@@ -250,10 +237,6 @@ void receive_loop(void)
 	#endif
 
 	stats.rx += nreceived;
-
-#else // [NO] USE_BURST
-	#error "No burst is not implemented"
-#endif //USE_BURST
 	}	//while
 
 #ifdef CALC_CHECKSUM
