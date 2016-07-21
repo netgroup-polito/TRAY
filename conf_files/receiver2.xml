@@ -1,0 +1,52 @@
+<domain type="kvm" xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+	<name>Receiver2</name>
+	<memory>2097152</memory>
+	<vcpu cpuset="0,4">2</vcpu>
+	<cputune>
+		<vcpupin vcpu='0' cpuset='4'/>
+	</cputune>
+
+	<cpu mode='host-model'>
+		<model fallback='forbid'/>
+		<topology sockets='1' cores='2' threads='1'/>
+	</cpu>
+
+	<resource>
+		<partition>/machine</partition>
+	</resource>
+	<os>
+		<type arch='x86_64' machine='pc-i440fx-1.6'>hvm</type>
+		<boot dev='hd'/>
+		<boot dev='cdrom'/>
+	</os>
+	<features>
+		<acpi/>
+		<apic/>
+		<pae/>
+	</features>
+
+	<devices>
+		<interface type='user'>
+			<mac address='52:54:00:93:ac:e1'/>
+			<model type='e1000'/>
+		</interface>
+		<disk type="file" device="disk">
+			<source file="/home/stack/Mauricio/vms/UbuntuServer.vdi"/>
+			<driver name="qemu" type="vdi"/>
+			<target dev="vda" bus="virtio"/>
+		</disk>
+		<graphics type="vnc" port="-1" autoport="yes" listen="0.0.0.0"/>
+
+	</devices>
+
+	<qemu:commandline>
+	<qemu:arg value='-snapshot'/>
+	</qemu:commandline>
+
+	<qemu:commandline>
+	<qemu:arg value='-redir'/>
+	<qemu:arg value='tcp:5010::22'/>
+</qemu:commandline>
+</domain>
+
+
