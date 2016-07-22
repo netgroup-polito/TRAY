@@ -8,13 +8,13 @@
 		</kvm>
 	</network-function>
 
-	<network-function name="998_receiver1"  num-ports="1" summary="Example VNF with several implementations">
+	<network-function name="998_receiver"  num-ports="1" summary="Example VNF with several implementations">
 		<kvm uri="/home/stack/Mauricio/directvm2vm/conf_files/receiver1.xml">
 			<port port-id="1" port-type="ivshmem"/>
 		</kvm>
 	</network-function>
 
-	<network-function name="999_receiver2"  num-ports="1" summary="Example VNF with several implementations">
+	<network-function name="999_receiver"  num-ports="1" summary="Example VNF with several implementations">
 		<kvm uri="/home/stack/Mauricio/directvm2vm/conf_files/receiver2.xml">
 			<port port-id="1" port-type="ivshmem"/>
 		</kvm>
