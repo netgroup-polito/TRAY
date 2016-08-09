@@ -1,6 +1,6 @@
 #! /bin/bash
 
-HOST=localhost
+HOST=demo
 
 start_ovs="ssh -t -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
 	stack@$HOST 											\
@@ -17,8 +17,10 @@ start_name_resolver="ssh -t -o UserKnownHostsFile=/dev/null -o StrictHostKeyChec
 start_orchestrator="ssh -t -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no \
 		stack@$HOST 										\
 		'cd /home/stack/Mauricio/directvm2vm/scripts/;		\
-		sleep 30 && sudo ./2_start_orchestrator.sh; 					\
+
 		exec $SHELL'"
+
+#		sleep 30 && sudo ./2_start_orchestrator.sh; 					\
 
 gnome-terminal  --tab -e "$start_ovs" 			\
 				--tab -e "$start_name_resolver" \
