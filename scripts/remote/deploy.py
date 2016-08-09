@@ -10,8 +10,8 @@ if len(sys.argv) >= 2:
 	if sys.argv[1] == 'on':
 		graph = '../../conf_files/nf_fg_on.json';
 
-login_url = "http://130.192.225.151:8080/login"
-graph_url = "http://130.192.225.151:8080/NF-FG/myGraph"
+login_url = "http://demo:8080/login"
+graph_url = "http://demo:8080/NF-FG/myGraph"
 
 headers_login = {'Content-Type': 'application/json'}
 payload = {'username':'admin','password':'1234'}
