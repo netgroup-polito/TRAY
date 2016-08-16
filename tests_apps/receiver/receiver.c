@@ -1,17 +1,7 @@
-#include <getopt.h>
-#include <string.h>
-
-#include <rte_mbuf.h>
 #include <rte_ethdev.h>
-#include <rte_ring.h>
-#include <rte_string_fns.h>
 #include <rte_memzone.h>
 #include <rte_memcpy.h>
-
-#include <rte_config.h>
-#include <rte_memzone.h>
 #include <rte_mempool.h>
-#include <rte_string_fns.h>
 
 #include <time.h>
 #include <stdlib.h>
@@ -34,15 +24,10 @@
 #define ALLOC 		1	/* allocate and deallocate packets */
 #define NO_ALLOC 	2	/* send the same packets always*/
 
-//Sending methods
-#define RING 		1	/* send packets to rte_rings */
-#define ETHERNET	2	/* send packets to network devices */
-
 #define BURST_SIZE 32u
 
 #define CALC_RX_STATS
 #define ALLOC_METHOD ALLOC
-#define SEND_MODE ETHERNET
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -73,10 +58,6 @@ struct port_statistics stats = {0};
 
 unsigned int kk = 0;
 
-#if SEND_MODE == RING
-struct rte_ring *rx_ring = NULL;
-#elif SEND_MODE == ETHERNET
-
 uint8_t portid;
 struct rte_eth_dev_info dev_info;
 
@@ -97,10 +78,6 @@ static const struct rte_eth_conf port_conf = {
 
 static uint16_t nb_rxd = 128;
 static uint16_t nb_txd = 512;
-#else
-#error "bad value for SEND_MODE"
-#endif
-
 
 int main(int argc, char *argv[])
 {
@@ -140,32 +117,12 @@ int main(int argc, char *argv[])
 	RTE_LOG(INFO, APP, "Calc Checksum: no.\n");
 #endif
 
-#if SEND_MODE == RING
-	RTE_LOG(INFO, APP, "SEND_MODE method RING.\n");
-#elif SEND_MODE == ETHERNET
-	RTE_LOG(INFO, APP, "SEND_MODE method is ETHERNET.\n");
-#endif
-
 	receive_loop();	//Receive packets...
 
 	RTE_LOG(INFO, APP, "Done\n");
 	return 0;
 }
 
-#if SEND_MODE == RING
-void init(char * dev_name)
-{
-	char rx_ring_name[RTE_RING_NAMESIZE];
-	sprintf(rx_ring_name, "%s_tx", dev_name);
-
-	if ((rx_ring = rte_ring_lookup(rx_ring_name)) == NULL)
-		rte_exit(EXIT_FAILURE, "Cannot find RX ring\n");
-
-	packets_pool = rte_mempool_lookup("ovs_mp_1500_0_262144");
-	if(packets_pool == NULL)
-		rte_exit(EXIT_FAILURE, "Cannot find memory pool\n");
-}
-#elif SEND_MODE == ETHERNET
 void init(char * dev_name)
 {
 	int ret;
@@ -203,7 +160,6 @@ void init(char * dev_name)
 
 	rte_eth_promiscuous_enable(portid);
 }
-#endif
 
 void receive_loop(void)
 {
@@ -219,12 +175,7 @@ void receive_loop(void)
 	while(likely(!stop /*|| (rte_ring_count(rx_ring) != 0)*/))
 	{
 		while(pause_);
-
-	#if SEND_MODE == RING
-	nreceived = rte_ring_sc_dequeue_burst(rx_ring, (void **) packets_array, BURST_SIZE);
-	#elif SEND_MODE == ETHERNET
-	nreceived = rte_eth_rx_burst(portid, 0, packets_array, BURST_SIZE);
-	#endif
+		nreceived = rte_eth_rx_burst(portid, 0, packets_array, BURST_SIZE);
 	#ifdef CALC_CHECKSUM
 		for(i = 0; i < nreceived; i++)
 			for(kk = 0; kk < PKT_LEN/8; kk++)
