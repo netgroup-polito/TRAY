@@ -1,10 +1,11 @@
 [submodule "dpdk"]
 	path = dpdk
 	url = https://github.com/netgroup-polito/dpdk
-	branch = hotplug
+	branch = directvm2vm_new
 [submodule "ovs"]
 	path = ovs
 	url = https://github.com/netgroup-polito/ovs
+	branch = directvm2vm_new
 [submodule "un-orchestrator"]
 	path = un-orchestrator
 	url = https://github.com/netgroup-polito/un-orchestrator/
