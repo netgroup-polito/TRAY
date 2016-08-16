@@ -1,12 +1,8 @@
-#include <getopt.h>
-#include <string.h>
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
 
-#include <rte_mbuf.h>
-#include <rte_memzone.h>
 #include <rte_memcpy.h>
 #include <rte_ethdev.h>
 #include <rte_config.h>
@@ -24,19 +20,6 @@ void crtl_c_handler(int s);
 
 volatile sig_atomic_t stop;
 void crtl_c_handler(int s);
-
-//Sending methods
-#define RING 		1	/* send packets to rte_rings */
-#define ETHERNET	2	/* send packets to network devices */
-#define SEND_MODE ETHERNET
-
-
-#if SEND_MODE == RING
-struct rte_ring *rx_ring1 = NULL;
-struct rte_ring *tx_ring1 = NULL;
-struct rte_ring *rx_ring2 = NULL;
-struct rte_ring *tx_ring2 = NULL;
-#elif SEND_MODE == ETHERNET
 
 struct rte_mempool * packets_pool = NULL;
 
@@ -61,7 +44,6 @@ static const struct rte_eth_conf port_conf = {
 
 static uint16_t nb_rxd = 128;
 static uint16_t nb_txd = 512;
-#endif
 
 int main(int argc, char *argv[])
 {
@@ -90,44 +72,6 @@ int main(int argc, char *argv[])
 	RTE_LOG(INFO, APP, "Done\n");
 	return 0;
 }
-
-#if SEND_MODE == RING
-void init(char * port1, char * port2)
-{
-	char ring1_tx[RTE_RING_NAMESIZE];
-	char ring1_rx[RTE_RING_NAMESIZE];
-
-	char ring2_tx[RTE_RING_NAMESIZE];
-	char ring2_rx[RTE_RING_NAMESIZE];
-
-	/* be aware that ring name is in ovs point of view */
-	sprintf(ring1_rx, "%s_tx", port1);
-	sprintf(ring1_tx, "%s_rx", port1);
-
-	sprintf(ring2_rx, "%s_tx", port2);
-	sprintf(ring2_tx, "%s_rx", port2);
-
-	if ((rx_ring1 = rte_ring_lookup(ring1_rx)) == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find RX1 ring: %s\n", ring1_rx);
-	}
-
-	if ((tx_ring1 = rte_ring_lookup(ring1_tx)) == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find TX1 ring: %s\n", ring1_tx);
-	}
-
-	if ((rx_ring2 = rte_ring_lookup(ring2_rx)) == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find RX1 ring: %s\n", ring2_rx);
-	}
-
-	if ((tx_ring2 = rte_ring_lookup(ring2_tx)) == NULL)
-	{
-		rte_exit(EXIT_FAILURE, "Cannot find TX2 ring: %s\n", ring2_tx);
-	}
-}
-#elif SEND_MODE == ETHERNET
 
 void init(char * port1, char * port2)
 {
@@ -210,59 +154,17 @@ void init(char * port1, char * port2)
 	rte_eth_promiscuous_enable(portid2);
 
 }
-#endif
 
 void forward_loop(void)
 {
 	unsigned rx_pkts;
 
 	struct rte_mbuf * pkts[BURST_SIZE] = {0};
-#if SEND_MODE == RING
-	int rslt = 0;
-#endif
 
 	signal (SIGINT,crtl_c_handler);
 
-/* code from ovs_client.c in ovs repository */
-
 	while(likely(!stop))
 	{
-		 /*
-		 * Try dequeuing max possible packets first, if that fails, get the
-		 * most we can. Loop body should only execute once, maximum.
-		 */
-#if SEND_MODE == RING
-		rx_pkts = BURST_SIZE;
-		while (unlikely(rte_ring_dequeue_bulk(rx_ring1, (void **) pkts, rx_pkts) != 0) &&
-			rx_pkts > 0)
-		{
-			rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring1), BURST_SIZE);
-		}
-
-		if (rx_pkts > 0) {
-			/* blocking enqueue */
-			do {
-				rslt = rte_ring_enqueue_bulk(tx_ring2, (void **) pkts, rx_pkts);
-			} while (rslt == -ENOBUFS);
-		}
-
-		/* do the same in the other sense */
-		rx_pkts = BURST_SIZE;
-		while (unlikely(rte_ring_dequeue_bulk(rx_ring2, (void **) pkts, rx_pkts) != 0) &&
-			rx_pkts > 0)
-		{
-			rx_pkts = (uint16_t)RTE_MIN(rte_ring_count(rx_ring2), BURST_SIZE);
-		}
-
-		if (rx_pkts > 0) {
-			/* blocking enqueue */
-			do {
-				rslt = rte_ring_enqueue_bulk(tx_ring1, (void **) pkts, rx_pkts);
-			} while (rslt == -ENOBUFS);
-		}
-
-
-#elif SEND_MODE == ETHERNET
 		rx_pkts = rte_eth_rx_burst(portid1, 0, pkts, BURST_SIZE);
 
 		if (rx_pkts > 0) {
@@ -281,8 +183,6 @@ void forward_loop(void)
 				rx_pkts -= rte_eth_tx_burst(portid1, 0, &pkts[0], rx_pkts);
 			} while (rx_pkts > 0);
 		}
-#endif
-
 	}
 }
 
