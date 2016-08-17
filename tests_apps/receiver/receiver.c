@@ -27,7 +27,7 @@
 #define BURST_SIZE 32u
 
 #define CALC_RX_STATS
-#define ALLOC_METHOD ALLOC
+#define ALLOC_METHOD NO_ALLOC
 
 /* Per-port statistics struct */
 struct port_statistics {

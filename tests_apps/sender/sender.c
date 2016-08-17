@@ -38,7 +38,7 @@
 #define CALC_ALLOC_STATS
 //#define CALC_CHECKSUM
 
-#define ALLOC_METHOD ALLOC
+#define ALLOC_METHOD NO_ALLOC
 
 /* Per-port statistics struct */
 struct port_statistics {
