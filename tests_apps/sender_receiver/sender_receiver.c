@@ -299,7 +299,6 @@ void print_stats(void)
 
 	rx_vec[i++] = p;
 	p = stats.rx;
-	i %= 4;
 	stats.rx = 0;
 #endif
 
