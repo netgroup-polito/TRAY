@@ -2,19 +2,19 @@
 
 <network-functions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                  xsi:noNamespaceSchemaLocation="network-functions.xsd">
-	<network-function name="001_sender"  num-ports="1" summary="Example VNF with several implementations">
+	<network-function name="sender"  num-ports="1" summary="Example VNF with several implementations">
 		<kvm uri="/home/stack/Mauricio/directvm2vm/conf_files/sender.xml">
 			<port port-id="1" port-type="ivshmem"/>
 		</kvm>
 	</network-function>
 
-	<network-function name="998_receiver"  num-ports="1" summary="Example VNF with several implementations">
+	<network-function name="receiver"  num-ports="1" summary="Example VNF with several implementations">
 		<kvm uri="/home/stack/Mauricio/directvm2vm/conf_files/receiver1.xml">
 			<port port-id="1" port-type="ivshmem"/>
 		</kvm>
 	</network-function>
 
-	<network-function name="999_receiver"  num-ports="1" summary="Example VNF with several implementations">
+	<network-function name="fake_receiver"  num-ports="1" summary="Example VNF with several implementations">
 		<kvm uri="/home/stack/Mauricio/directvm2vm/conf_files/receiver2.xml">
 			<port port-id="1" port-type="ivshmem"/>
 		</kvm>
