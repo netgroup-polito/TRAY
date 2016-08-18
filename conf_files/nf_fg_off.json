@@ -5,7 +5,7 @@
       "VNFs":[
          {
             "id":"00",
-            "name":"001_sender",
+            "name":"sender",
             "ports":[
                {
                   "id":"inout:0",
@@ -15,7 +15,7 @@
          },
          {
             "id":"98",
-            "name":"998_receiver",
+            "name":"receiver",
             "ports":[
                {
                   "id":"inout:0",
@@ -25,7 +25,7 @@
          },
          {
             "id":"99",
-            "name":"999_receiver",
+            "name":"fake_receiver",
             "ports":[
                {
                   "id":"inout:0",
@@ -41,13 +41,38 @@
          "flow-rules":[
             {
                "id":"01",
-               "priority":1,
+               "priority":100,
                "match":{
                   "port_in":"vnf:00:inout:0"
                },
                "actions":[
                   {
                      "output_to_port":"vnf:98:inout:0"
+                  }
+               ]
+            },
+            {
+               "id":"10",
+               "priority":1,
+               "match":{
+                  "port_in":"vnf:00:inout:0",
+                  "vlan_id" : "25"
+               },
+               "actions":[
+                  {
+                     "output_to_port":"vnf:99:inout:0"
+                  }
+               ]
+            },
+            {
+               "id":"02",
+               "priority":1,
+               "match":{
+                  "port_in":"vnf:98:inout:0"
+               },
+               "actions":[
+                  {
+                     "output_to_port":"vnf:00:inout:0"
                   }
                ]
             }

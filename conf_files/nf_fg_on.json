@@ -5,7 +5,7 @@
       "VNFs":[
          {
             "id":"00",
-            "name":"001_sender",
+            "name":"sender",
             "ports":[
                {
                   "id":"inout:0",
@@ -15,7 +15,7 @@
          },
          {
             "id":"98",
-            "name":"998_receiver",
+            "name":"receiver",
             "ports":[
                {
                   "id":"inout:0",
@@ -25,7 +25,7 @@
          },
          {
             "id":"99",
-            "name":"999_receiver",
+            "name":"fake_receiver",
             "ports":[
                {
                   "id":"inout:0",
