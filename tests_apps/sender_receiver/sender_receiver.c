@@ -285,7 +285,7 @@ void print_final_stats(void)
 
 	totalrx = totalrx/(RUN_TIME - 10);
 
-	printf("*****total rx:%'" PRIu64 "**********\n", totalrx);
+	printf("%" PRIu64 "\n", totalrx);
 }
 
 
