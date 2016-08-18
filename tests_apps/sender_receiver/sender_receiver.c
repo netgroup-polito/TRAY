@@ -23,6 +23,8 @@
 
 #define CALC_RX_STATS
 
+#define RUN_TIME 30
+
 /* function prototypes */
 void send_receive_loop(void);
 void init(char * dev_name);
@@ -32,7 +34,7 @@ inline int send_packets(struct rte_mbuf ** packets);
 void print_stats(void);
 void print_final_stats(void);
 
-static uint64_t rx_vec[4];
+static uint64_t rx_vec[RUN_TIME];
 
 unsigned int counter = 0;
 
@@ -277,11 +279,11 @@ void crtl_c_handler(int s)
 void print_final_stats(void)
 {
 	uint64_t totalrx = 0;
-	int i = 0;
-	for(i = 0 ; i < 4; i++)
+	int i;
+	for(i = 5 ; i < RUN_TIME - 5; i++)
 		totalrx += rx_vec[i];
 
-	totalrx  = totalrx/4;
+	totalrx = totalrx/(RUN_TIME - 10);
 
 	printf("*****total rx:%'" PRIu64 "**********\n", totalrx);
 }
@@ -322,11 +324,23 @@ void print_stats(void)
 void ALARMhandler(int sig)
 {
 	(void) sig;
+
+	static unsigned int seconds = 0;
+
+	seconds++;
+
+	if (seconds == RUN_TIME) {
+		stop = 1;
+		return;
+	}
+
 	signal(SIGALRM, SIG_IGN);          /* ignore this signal       */
+
 	if(!pause_)
 		print_stats();
 	signal(SIGALRM, ALARMhandler);     /* reinstall the handler    */
 	alarm(PRINT_INTERVAL);
+
 
 	switch(counter)
 	{
