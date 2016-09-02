@@ -240,8 +240,8 @@ int record_stats(void *arg)
 		return -1;
 	}
 
-	for (i = 0; i < index; i++) {
-		fprintf(f, "%" PRIu64 "\n", stats_vector[i]);
+	for (i = 1; i < index; i++) {
+		fprintf(f, "%" PRIu64 "\n", stats_vector[i] - stats_vector[i - 1]);
 	}
 
 	fclose(f);
