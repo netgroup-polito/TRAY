@@ -28,7 +28,7 @@
 #define CALC_RX_STATS
 #define ALLOC_METHOD NO_ALLOC
 
-#define SAMPLE_MS 5
+#define SAMPLE_MS 1
 #define SAMPLE_TSC (SAMPLE_MS*rte_get_tsc_hz()/1000)
 #define NSAMPLES (30*1000/SAMPLE_MS)
 
@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
 	RTE_LOG(INFO, APP, "Calc Checksum: no.\n");
 #endif
 
-	retval = rte_eal_remote_launch(record_stats, NULL, 1);
+	retval = rte_eal_remote_launch(record_stats, NULL, 2);
 	if (retval) {
 		RTE_LOG(ERR, APP, "error launching remote function...\n");
 		return -1;
@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
 
 	receive_loop();	//Receive packets...
 
-	retval = rte_eal_wait_lcore(1);
+	retval = rte_eal_wait_lcore(2);
 	if (retval) {
 		RTE_LOG(ERR, APP, "error waiting for core...");
 		return -1;
