@@ -30,6 +30,7 @@
 
 #define SAMPLE_MS 5
 #define SAMPLE_TSC (SAMPLE_MS*rte_get_tsc_hz()/1000)
+#define NSAMPLES (30*1000/SAMPLE_MS)
 
 /* Per-port statistics struct */
 struct port_statistics {
@@ -125,6 +126,12 @@ int main(int argc, char *argv[])
 
 	receive_loop();	//Receive packets...
 
+	retval = rte_eal_wait_lcore(1);
+	if (retval) {
+		RTE_LOG(ERR, APP, "error waiting for core...");
+		return -1;
+	}
+
 	RTE_LOG(INFO, APP, "Done\n");
 	return 0;
 }
@@ -172,7 +179,9 @@ void receive_loop(void)
 	struct rte_mbuf * packets_array[BURST_SIZE] = {0};
 	int nreceived;
 
-	signal(SIGINT,crtl_c_handler);
+	RTE_LOG(INFO, APP, "This is receive thread\n");
+
+	signal(SIGINT, crtl_c_handler);
 	while (likely(!stop)) {
 		nreceived = rte_eth_rx_burst(portid, 0, packets_array, BURST_SIZE);
 	#ifdef CALC_CHECKSUM
@@ -204,9 +213,11 @@ void crtl_c_handler(int s)
 int record_stats(void *arg)
 {
 	(void) arg;
-	uint64_t stats_vector[120*1000/SAMPLE_MS];
+	uint64_t stats_vector[NSAMPLES];
 	uint64_t current, old;
 	unsigned int index = 0;
+
+	RTE_LOG(INFO, APP, "This is record stats thread\n");
 
 	old = rte_get_timer_cycles();
 
@@ -215,6 +226,9 @@ int record_stats(void *arg)
 		if ((current - old) > SAMPLE_TSC) {
 			old = current;
 			stats_vector[index++] = stats.rx;
+
+			if (index == NSAMPLES)
+				stop = 1;
 		}
 	}
 
@@ -226,8 +240,8 @@ int record_stats(void *arg)
 		return -1;
 	}
 
-	for (i = 0; i < index; i++) {
-		fprintf(f, "%" PRIu64 "\n", stats_vector[index]);
+	for (i = 1; i < index; i++) {
+		fprintf(f, "%" PRIu64 "\n", stats_vector[i] - stats_vector[i - 1]);
 	}
 
 	fclose(f);
