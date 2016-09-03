@@ -33,8 +33,8 @@
 
 /* Per-port statistics struct */
 struct port_statistics {
-	uint32_t rx;
-	uint32_t free_retries;
+	uint64_t rx;
+	uint64_t free_retries;
 } __rte_cache_aligned;
 
 #ifdef CALC_CHECKSUM
