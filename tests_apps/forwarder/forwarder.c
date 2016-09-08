@@ -165,7 +165,7 @@ void forward_loop(void)
 		if (rx_pkts > 0) {
 			/* blocking enqueue */
 			do {
-				index += rte_eth_tx_burst(portid2, 0, &pkts[index], rx_pkts);
+				index += rte_eth_tx_burst(portid2, 0, &pkts[index], rx_pkts - index);
 			} while (index < rx_pkts);
 		}
 
@@ -175,7 +175,7 @@ void forward_loop(void)
 		if (rx_pkts > 0) {
 			/* blocking enqueue */
 			do {
-				index += rte_eth_tx_burst(portid1, 0, &pkts[index], rx_pkts);
+				index += rte_eth_tx_burst(portid1, 0, &pkts[index], rx_pkts - index);
 			} while (index < rx_pkts);
 		}
 	}
