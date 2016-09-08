@@ -152,30 +152,31 @@ void init(char * port1, char * port2)
 void forward_loop(void)
 {
 	unsigned rx_pkts;
+	unsigned index;
 
 	struct rte_mbuf * pkts[BURST_SIZE] = {0};
 
-	signal (SIGINT,crtl_c_handler);
+	signal(SIGINT,crtl_c_handler);
 
 	while(likely(!stop))
 	{
 		rx_pkts = rte_eth_rx_burst(portid1, 0, pkts, BURST_SIZE);
-
+		index = 0;
 		if (rx_pkts > 0) {
 			/* blocking enqueue */
 			do {
-				rx_pkts -= rte_eth_tx_burst(portid2, 0, &pkts[0], rx_pkts);
-			} while (rx_pkts > 0);
+				index += rte_eth_tx_burst(portid2, 0, &pkts[index], rx_pkts);
+			} while (index < rx_pkts);
 		}
 
 		/* do the same in the other sense */
 		rx_pkts = rte_eth_rx_burst(portid2, 0, pkts, BURST_SIZE);
-
+		index = 0;
 		if (rx_pkts > 0) {
 			/* blocking enqueue */
 			do {
-				rx_pkts -= rte_eth_tx_burst(portid1, 0, &pkts[0], rx_pkts);
-			} while (rx_pkts > 0);
+				index += rte_eth_tx_burst(portid1, 0, &pkts[index], rx_pkts);
+			} while (index < rx_pkts);
 		}
 	}
 }
