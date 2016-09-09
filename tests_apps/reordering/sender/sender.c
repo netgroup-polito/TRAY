@@ -166,7 +166,7 @@ void send_loop(void)
 	RTE_LOG(INFO, APP, "send_loop()\n");
 
 	char pkt[PKT_SIZE] = {0};
-	uint64_t seqno = 0LL;
+	uint64_t seqno = 1LL;
 
 	int retval = 0;
 	(void) retval;
@@ -225,8 +225,8 @@ void send_loop(void)
 		{
 			/* XXX: is this a valid aprroach? */
 			rte_mbuf_refcnt_set(packets_array[i], 1);
-
-			rte_memcpy(rte_pktmbuf_mtod(packets_array[i], void *), &seqno, sizeof(seqno));
+			memcpy(pkt, &seqno, sizeof(seqno));
+			rte_memcpy(rte_pktmbuf_mtod(packets_array[i], void *), pkt, PKT_SIZE);
 			seqno++;
 			packets_array[i]->next = NULL;
 			packets_array[i]->pkt_len = PKT_SIZE;
