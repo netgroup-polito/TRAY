@@ -1,5 +1,5 @@
-# Direct vm2vm
+# TRAY: a Transparent Highway for Virtual Network Functions in OvS
 
-Direct vm2vm is an extension to OpenvSwitch and DPDK that aims to optimize the communication among Virtual Network Functions.
+TRAY extends OpenvSwitch and DPDK with the aim of optimizing the communication among Virtual Network Functions.
 
 Documentation is under construction.
